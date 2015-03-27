@@ -1,0 +1,31 @@
+{
+  "name": "distributed-callback-queue",
+  "version": "1.0.0",
+  "description": "Creates distributed callback queue based on redis pubsub. Pass 2 redis clients (supports redis sentinel as well for HA), manages locks across multiple processes",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AVVS/distributed-callback-queue.git"
+  },
+  "keywords": [
+    "callback",
+    "queue",
+    "callback-queue",
+    "lock",
+    "distributed",
+    "pubsub",
+    "redis"
+  ],
+  "author": "Vitaly Aminev <v@aminev.me>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/AVVS/distributed-callback-queue/issues"
+  },
+  "homepage": "https://github.com/AVVS/distributed-callback-queue",
+  "dependencies": {
+    "callback-queue": "^1.0.2"
+  }
+}

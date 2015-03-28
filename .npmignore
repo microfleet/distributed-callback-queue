@@ -28,3 +28,4 @@ build/Release
 
 # do not include test dir in the published module
 test
+__tests__

@@ -3,6 +3,50 @@
 
 jest.autoMockOff();
 
+// mock redis lock module
+jest.setMock('redislock', {
+
+    errors: require('redislock/lib/errors'),
+
+    locks: {},
+
+    createLock: function () {
+        var self = this,
+            obj;
+
+        obj = {
+
+            acquire: function (key, callback) {
+
+                if (!self.locks[key]) {
+                    self.locks[key] = true;
+                    return setImmediate(callback);
+                }
+
+                obj.release = function (done) {
+
+                    if (self.locks[key]) {
+                        delete self.locks[key];
+                        return setImmediate(callback);
+                    }
+
+                    return setImmediate(done, new self.errors.LockReleaseError('no lock'));
+                };
+
+                setImmediate(callback, new self.errors.LockAcquisitionError('lock already acquired'));
+
+            }
+
+        };
+
+        return obj;
+
+    }
+
+});
+
+jest.setMock('arklogger', {});
+
 describe('Distributed callback queue', function () {
 
     it('callback queue: should queue new job request', function () {
@@ -77,10 +121,36 @@ describe('Distributed callback queue', function () {
     });
 
     describe('lock acquisition', function () {
+        var DCQ = require('../index.js');
 
-    });
+        var fn = jest.genMockFn();
+        var done = jest.genMockFn();
+        var key = 'lock-acq-test';
 
-    describe('complete workflow', function () {
+        var context = {
+            createWorker: DCQ.prototype.createWorker,
+            lockPrefix: '',
+            lockOptions: {
+                timeout: 20000,
+                retry: 0,
+                delay: 0
+            }
+        };
+
+        // this will queue, but it will resolve as a second function, because
+        // there is a shortcut before lock acquisition
+        DCQ.prototype.push.call(context, key, fn, done);
+
+        // wont resolve
+        DCQ.prototype.push.call(context, key, fn, done);
+
+        jest.runAllTimers();
+
+        expect(fn.mock.calls.length).toBe(0);
+        expect(done.mock.calls.length).toBe(2);
+
+        expect(done.mock.calls[0]).toEqual([null, false]);
+        expect(done.mock.calls[1]).toEqual([null, jasmine.any(Function)]);
 
     });
 

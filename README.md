@@ -33,6 +33,7 @@ var CallbackQueue = require('distributed-callback-queue');
 var opts = {
     client: redis,  // lock acquisition, can be shared with the rest of the app
     pubsub: pubsub, // pubsub, please do not share unless you know what you are doing
+    pubsubChannel: '{mypubsubchannel}',
     lock: {
         timeout: 20000, // in 20000ms lock will expire, defaults to 10000
         retries: 0, // if we failed to acquire lock for the first time, retry in `delay`. Defaults to 1
@@ -88,7 +89,7 @@ function onJobQueued(err, workCompleted) {
 
     // I've got the lock, do something
     var nastylongcalculations = 1 + 1;
-    
+
     workCompleted(null, nastylongcalculations);
 }
 

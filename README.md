@@ -87,7 +87,9 @@ function onJobQueued(err, workCompleted) {
     }
 
     // I've got the lock, do something
-    workCompleted(null, 10);
+    var nastylongcalculations = 1 + 1;
+    
+    workCompleted(null, nastylongcalculations);
 }
 
 ```

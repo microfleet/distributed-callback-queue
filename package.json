@@ -1,6 +1,6 @@
 {
   "name": "distributed-callback-queue",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Creates distributed callback queue based on redis pubsub. Pass 2 redis clients (supports redis sentinel as well for HA), manages locks across multiple processes",
   "main": "index.js",
   "scripts": {

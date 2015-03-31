@@ -83,10 +83,10 @@ describe('Distributed callback queue', function () {
         var pubsubChannel = 'test';
         var redisPublisher = { publish: jest.genMockFn() };
         var redisConsumer = { subscribe: jest.genMockFn() };
-        var logger = { warn: jest.genMockFn() };
+        var logger = { warn: jest.genMockFn(), debug: jest.genMockFn() };
 
         var consumer = callbackQueue.createConsumer(redisConsumer, pubsubChannel, logger);
-        var publisher = callbackQueue.createPublisher(redisPublisher, pubsubChannel);
+        var publisher = callbackQueue.createPublisher(redisPublisher, pubsubChannel, logger);
 
         // wire publish to local subscribed channel
         redisPublisher.publish.mockImpl(consumer);
@@ -114,7 +114,7 @@ describe('Distributed callback queue', function () {
         expect(callback).toBeCalledWith(null, message);
 
         expect(callMock.mock.calls.length).toBe(2);
-        expect(callMock).toBeCalledWith(queueName, [ null, message ]);
+        expect(callMock).toBeCalledWith(queueName, [ null, message ], logger);
 
         expect(logger.warn.mock.calls.length).toBe(0);
 

@@ -1,5 +1,7 @@
 # Distributed callback queue
 
+[![Codacy Badge](https://www.codacy.com/project/badge/1a90183ad6964bfca54a7ba0f4b9b3a7)](https://www.codacy.com/app/v/distributed-callback-queue)
+
 Purpose of this module to allow only 1 similar action to run at the same time across any amount
 of the machines. This task is solved by the means of acquiring lock before any action
 is performed. Currently redis is used as a backing provider, which is super fast,

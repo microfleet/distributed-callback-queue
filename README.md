@@ -20,7 +20,7 @@ in the error object, as it will kill your process
 
 ## Usage
 
-[Opts description](blob/master/lib/distributed-callback-queue.js#L8-L23)
+[Opts description](https://github.com/AVVS/distributed-callback-queue/blob/master/lib/distributed-callback-queue.js#L8-L23)
 
 ```js
 var CallbackQueue = require('distributed-callback-queue');

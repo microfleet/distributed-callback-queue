@@ -4,9 +4,9 @@
 jest.autoMockOff();
 
 // mock redis lock module
-jest.setMock('redislock', {
+jest.setMock('ioredis-lock', {
 
-    errors: require('redislock/lib/errors'),
+    errors: require('ioredis-lock/lib/errors'),
 
     locks: {},
 
@@ -98,7 +98,7 @@ describe('Distributed callback queue', function () {
         expect(callbackQueue._queue()[queueName]).toEqual(jasmine.any(Function));
 
         // check subscription
-        expect(redisConsumer.subscribe).toBeCalledWith(pubsubChannel);
+        expect(redisConsumer.subscribe).toBeCalledWith(pubsubChannel, jasmine.any(Function));
         expect(redisConsumer.subscribe.mock.calls.length).toBe(1);
 
         var message = { queued: true };

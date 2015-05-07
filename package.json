@@ -1,6 +1,6 @@
 {
   "name": "distributed-callback-queue",
-  "version": "1.1.0",
+  "version": "2.0.0-pre",
   "description": "Creates distributed callback queue based on redis pubsub. Pass 2 redis clients (supports redis sentinel as well for HA), manages locks across multiple processes",
   "main": "index.js",
   "scripts": {
@@ -26,14 +26,14 @@
   },
   "homepage": "https://github.com/AVVS/distributed-callback-queue",
   "dependencies": {
-    "arklogger": "^1.4.0",
+    "arklogger": "^1.4.1",
     "callback-queue": "^1.1.1",
     "error-tojson": "0.0.1",
-    "lodash": "^3.6.0",
-    "mm-lodash": "^1.0.2",
-    "redislock": "^1.0.2"
+    "ioredis-lock": "^1.0.0",
+    "lodash": "^3.8.0",
+    "mm-lodash": "^1.2.5"
   },
   "devDependencies": {
-    "jest-cli": "^0.4.0"
+    "jest-cli": "^0.4.1"
   }
 }

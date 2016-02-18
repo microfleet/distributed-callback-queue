@@ -1,6 +1,6 @@
 {
   "name": "dlock",
-  "version": "3.1.2",
+  "version": "3.1.3",
   "description": "Creates distributed callback queue based on redis pubsub. Pass 2 redis clients (supports redis sentinel as well for HA), manages locks across multiple processes",
   "main": "./lib/distributed-callback-queue.js",
   "scripts": {

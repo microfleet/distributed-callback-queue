@@ -36,9 +36,7 @@ class DistributedCallbackQueue {
     const client = options.client;
     assert.ok(client, 'options.client must be defined');
 
-    const pubsub = options.pubsub || typeof client.duplicate === 'function' ?
-      client.duplicate({ lazyConnect: false }) : client;
-
+    const pubsub = options.pubsub || (typeof client.duplicate === 'function' ? client.duplicate({ lazyConnect: false }) : client);
     if (!(pubsub instanceof Redis.Cluster)) {
       assert.notStrictEqual(client, pubsub, 'options.client and options.pubsub must have separate redis clients'); // eslint-disable-line max-len
     }

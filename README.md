@@ -57,7 +57,7 @@ callbackQueue
     // that were passed from here
 
     const nastylongcalculations = 1 + 1;
-    workCompleted(null, nastylongcalculations);
+    completed(null, nastylongcalculations);
   })
   .catch(errPredicate, err => {
     // failed to queue

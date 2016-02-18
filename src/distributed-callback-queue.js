@@ -3,6 +3,7 @@ const defaults = require('lodash.defaults');
 const assign = require('lodash.assign');
 const callbackQueue = require('./callback-queue');
 const redislock = require('ioredis-lock');
+const Redis = require('ioredos');
 const bunyan = require('bunyan');
 const assert = require('assert');
 const { LockAcquisitionError } = redislock;
@@ -35,8 +36,12 @@ class DistributedCallbackQueue {
     const client = options.client;
     assert.ok(client, 'options.client must be defined');
 
-    const pubsub = options.pubsub || client.duplicate({ lazyConnect: false });
-    assert.notStrictEqual(client, pubsub, 'options.client and options.pubsub must have separate redis clients'); // eslint-disable-line max-len
+    const pubsub = options.pubsub || typeof client.duplicate === 'function' ?
+      client.duplicate({ lazyConnect: false }) : client;
+
+    if (!(pubsub instanceof Redis.Cluster)) {
+      assert.notStrictEqual(client, pubsub, 'options.client and options.pubsub must have separate redis clients'); // eslint-disable-line max-len
+    }
 
     const pubsubChannel = options.pubsubChannel;
     assert.ok(pubsubChannel, 'pubsubChannel must be specified');

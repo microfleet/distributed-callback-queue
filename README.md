@@ -59,6 +59,9 @@ callbackQueue
     const nastylongcalculations = 1 + 1;
     completed(null, nastylongcalculations);
   })
+  // omit that error
+  .catch({ name: 'LockAcquisitionError' }, noop)
+  // handle this one
   .catch(errPredicate, err => {
     // failed to queue
   });

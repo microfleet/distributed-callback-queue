@@ -1,9 +1,16 @@
-const ld = require('lodash');
+const Promise = require('bluebird');
+const defaults = require('lodash.defaults');
+const assign = require('lodash.assign');
 const callbackQueue = require('./callback-queue');
 const redislock = require('ioredis-lock');
 const bunyan = require('bunyan');
 const assert = require('assert');
 const { LockAcquisitionError } = redislock;
+const pkg = require('../package.json');
+
+function notLockAcquisitionError(e) {
+  return e.name !== 'LockAcquisitionError';
+}
 
 /**
  * @class DistributedCallbackQueue
@@ -24,29 +31,30 @@ const { LockAcquisitionError } = redislock;
  */
 class DistributedCallbackQueue {
 
-  constructor(options = { lock: {} }) {
+  constructor(options = {}) {
     const client = options.client;
-    const pubsub = options.pubsub || client.duplicate({ lazyConnect: false });
-    const pubsubChannel = options.pubsubChannel;
-
     assert.ok(client, 'options.client must be defined');
+
+    const pubsub = options.pubsub || client.duplicate({ lazyConnect: false });
     assert.notStrictEqual(client, pubsub, 'options.client and options.pubsub must have separate redis clients'); // eslint-disable-line max-len
+
+    const pubsubChannel = options.pubsubChannel;
     assert.ok(pubsubChannel, 'pubsubChannel must be specified');
 
-    const lockOptions = ld.defaults(options.lock, {
+    const lockOptions = defaults(options.lock || {}, {
       timeout: 10000,
       retries: 1,
       delay: 100,
     });
 
-    const logger = this.logger = this.initLogger(options.log);
+    const logger = this.logger = this.initLogger(options);
 
     // put on the instance
-    ld.extend(this, {
+    assign(this, {
       client,
       pubsub,
       lockOptions,
-      lockPrefix: options.lockPrefix || '{dcb}',
+      lockPrefix: options.lockPrefix || pkg.name,
       publish: callbackQueue.createPublisher(client, pubsubChannel, logger),
       consume: callbackQueue.createConsumer(pubsub, pubsubChannel, logger),
     });
@@ -58,7 +66,7 @@ class DistributedCallbackQueue {
   }
 
   initLogger(options) {
-    const { log: logger, debug } = options;
+    const { log: logger, debug, name } = options;
     const loggerEnabled = typeof logger === 'undefined' ? !!debug : logger;
 
     if (loggerEnabled && logger instanceof bunyan) {
@@ -79,7 +87,7 @@ class DistributedCallbackQueue {
     }
 
     return bunyan.createLogger({
-      name: name || 'mservice',
+      name: name || pkg.name,
       streams,
     });
   }
@@ -113,17 +121,11 @@ class DistributedCallbackQueue {
     return lock
       .acquire(lockRedisKey)
       .then(() => this.createWorker(lockRedisKey, lock))
-      .catch(err => {
-        // this is ok, somebody already acquired lock
-        // same as when `queued` === `false`
-        if (err.name === 'LockAcquisitionError') {
-          throw new LockAcquisitionError('job is already running');
-        }
-
+      .catch(notLockAcquisitionError, err => {
         // this is an abnormal error, need to post it and cancel requests
         // so that they dont hang
-        return this.publish(lockRedisKey, err)
-          .reflect()
+        return this
+          .publish(lockRedisKey, err)
           .throw(err);
       });
   }

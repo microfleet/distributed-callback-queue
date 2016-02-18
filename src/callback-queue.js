@@ -1,8 +1,8 @@
+const Promise = require('bluebird');
 const callbackQueue = require('callback-queue');
 const serializeError = require('serialize-error');
 
 // callback buckets
-const setImmediate = setImmediate || process.nextTick;
 const queue = new Map();
 const isArray = Array.isArray;
 
@@ -63,6 +63,9 @@ exports.createPublisher = function createPublisher(redis, pubsubChannel, logger)
   };
 };
 
+/**
+ * Helper function to parse possible JSON from the Buffer
+ */
 function tryParsing(message, logger) {
   try {
     return JSON.parse(message);

@@ -81,4 +81,25 @@ function onJobCompleted(err, ...args) {
     // prints 2
     console.log(args[0]);
 }
+
+/**
+ * Method `once` - means there can only be 1 concurrent task
+ * and callers will be rejected if they can't acquire lock
+ */
+
+callbackQueue
+  .once('app:job:processing')
+  .then(lock => {
+    // perform lengthy calculations here
+    // call `lock.extend()` if needed
+
+    // do not forget to release lock after the job is done
+    // do not care about result
+    return lock.release().reflect();
+  })
+  .catch(err => {
+    // lock could not be acquire
+  })
+
+
 ```

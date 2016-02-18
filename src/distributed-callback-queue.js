@@ -92,8 +92,20 @@ class DistributedCallbackQueue {
     });
   }
 
+  /**
+   * Combines task key
+   * @param  {String} suffix
+   */
   key(suffix) {
     return `${this.lockPrefix}${suffix}`;
+  }
+
+  /**
+   * Creates lock instance
+   * @return {Lock}
+   */
+  getLock() {
+    return redislock.createLock(this.client, this.lockOptions);
   }
 
   /**
@@ -104,6 +116,8 @@ class DistributedCallbackQueue {
    *                    somebody else is working on the same task right now
    */
   push(suffix, next) {
+    assert(suffix, 'must be a truthy string');
+
     // first queue locally to make use of pending requests
     const lockRedisKey = this.key(suffix);
     const queued = callbackQueue.add(lockRedisKey, next);
@@ -115,7 +129,7 @@ class DistributedCallbackQueue {
     }
 
     // create lock
-    const lock = redislock.createLock(this.client, this.lockOptions);
+    const lock = this.getLock();
 
     // get the lock
     return lock
@@ -131,6 +145,25 @@ class DistributedCallbackQueue {
   }
 
   /**
+   * Performs task once and _does_ not notify others of it's completion
+   * @param {String} suffix - queue identifier
+   * @returns {Promise} if promise is resolved then we must act, if it's rejected - then
+   *                    somebody else is working on the same task right now.
+   *                    Caller won't be notified when task is complete
+   *                    Promise contains lock, which must be released after the job is completed
+   *                    Call `lock.release()` or `lock.extend` based on what's needed
+   */
+  once(suffix) {
+    assert(suffix, 'must be a truthy string');
+
+    const lockRedisKey = this.key(suffix);
+    const lock = this.getLock();
+    return lock
+      .acquire(lockRedisKey)
+      .return(lock);
+  }
+
+  /**
    * Returns function that should be called with the result of the work
    * @param {String} lockRedisKey - key used for locking
    * @param {Object} lock - acquired lock
@@ -138,22 +171,32 @@ class DistributedCallbackQueue {
    *                            	all queued callbacks
    */
   createWorker(lockRedisKey, lock) {
+    const dlock = this;
     /**
      * This function must be called when job has been completed
      * @param  {Error} err
      * @param  {Array} ...args
      */
     return (err, ...args) => {
-      // emit event
-      this.publish(lockRedisKey, err, ...args);
-
       // must release lock now. Technically there could be an event
       // where lock had not been released, notification already emitted
       // and callback is stuck in the queue, to avoid that we can add retry
       // to lock acquisition. Desicion and constraints are up to you. Ideally
       // you would want to cache result of the function for some time - and then
       // this race is completed. Multi() command is not possible to use here
-      return lock.release();
+      return lock
+        .release()
+        .then(() => {
+          // emit event
+          // at this point we are sure that this job still belongs to us,
+          // if it doesn't - we can't publish response, because this task may be acquired
+          // by someone else
+          return dlock.publish(lockRedisKey, err, ...args);
+        })
+        .catch(error => {
+          // because a job may take too much time, other listeners must implement timeout/retry strategy
+          dlock.logger.warn('failed to release lock and publish results', error);
+        });
     };
   }
 

@@ -173,7 +173,8 @@ class DistributedCallbackQueue {
    * @return {MultiLock}
    */
   multi(...args) {
-    const actions = flatten(args);
+    const actions = flatten(args).filter(Boolean);
+    assert(actions.length, 'at least 1 action must be supplied');
 
     return Promise
       .map(actions, action => this.once(action).reflect())

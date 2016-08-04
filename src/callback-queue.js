@@ -80,13 +80,18 @@ function tryParsing(message, logger) {
  * @param {Object} redis
  */
 exports.createConsumer = function createConsumer(redis, pubsubChannel, logger) {
-  redis.subscribe(pubsubChannel, err => {
-    if (err) {
-      logger.fatal('Failed to subsctibe to pubsub channel:', err);
-    } else {
+  const connect = () => redis
+    .subscribe(pubsubChannel)
+    .then(() => {
       logger.info('Subscribed to channel %s', pubsubChannel);
-    }
-  });
+    })
+    .catch(err => {
+      logger.fatal('Failed to subsctibe to pubsub channel:', err);
+      return Promise.delay(250).then(connect);
+    });
+
+  // init connection
+  connect();
 
   return function redisEventListener(channel, _message) {
     if (channel.toString() !== pubsubChannel) {

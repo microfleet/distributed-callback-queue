@@ -9,7 +9,7 @@ const isArray = Array.isArray;
 /**
  * Call functions stored in local queues
  * @param  {String} queueName
- * @param  {Array}  args
+ * @param  {Array} args
  */
 function call(queueName, args, logger) {
   const callback = queue.get(queueName);
@@ -28,7 +28,7 @@ function call(queueName, args, logger) {
 
 /**
  * Add callback into local queue
- * @param {String}   key - queue key
+ * @param {String} key - queue key
  * @param {Function} callback - function to add
  */
 exports.add = function add(key, callback) {

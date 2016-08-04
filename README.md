@@ -101,5 +101,39 @@ callbackQueue
     // lock could not be acquire
   })
 
+/**
+ * Method `multi` - similar to once, except that it expects to hold
+ * multiple locks concurrently. This is useful when you want to perform non-atomic
+ * changes on different resource and must ensure that they don't change during the transaction
+ */
+const { MultiLockError } = CallbackQueue;
+callbackQueue
+  .multi('1', '2', '3', ['4', '5'])
+  .then(multiLock => {
+    // multiLock has the same interface as normal lock
+    // .release()
+    // .extend()
+
+    return multiLock
+      // will reject promise if it can't extend ALL the locks,
+      // you can catch `MultiLockError`, which extends Promise.AggregateError
+      // and has the same interface + `.locks`. If MultiLockError is thrown
+      // successfully extends locks would be automatically released
+      .extend(1000)
+      .then(() => longRunningJob())
+      // same as .extend in terms of cleaning up
+      // in case we can't do it - it will throw
+      .then(() => multiLock.release())
+      .catch(MultiLockError, e => {
+        // re-throw generic error so that it doesn't end up in the generic error handler
+      });
+  })
+  .catch(MultiLockError, e => {
+    // could not acquire locks
+  })
+  .catch(e => {
+    // unexpected error - perhaps redis was offline
+    // or timed out. ioredis-created errors would be defined here
+  });
 
 ```

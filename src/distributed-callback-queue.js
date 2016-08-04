@@ -6,9 +6,11 @@ const redislock = require('ioredis-lock');
 const Redis = require('ioredis');
 const bunyan = require('bunyan');
 const assert = require('assert');
-const { LockAcquisitionError } = redislock;
+const flatten = require('lodash.flatten');
+const { MultiLock, MultiLockError } = require('./multi-lock');
 const pkg = require('../package.json');
 
+const { LockAcquisitionError } = redislock;
 function notLockAcquisitionError(e) {
   return e.name !== 'LockAcquisitionError';
 }
@@ -38,7 +40,8 @@ class DistributedCallbackQueue {
 
     const pubsub = options.pubsub || (typeof client.duplicate === 'function' ? client.duplicate({ lazyConnect: false }) : client);
     if (!(pubsub instanceof Redis.Cluster)) {
-      assert.notStrictEqual(client, pubsub, 'options.client and options.pubsub must have separate redis clients'); // eslint-disable-line max-len
+      // eslint-disable-next-line max-len
+      assert.notStrictEqual(client, pubsub, 'options.client and options.pubsub must have separate redis clients');
     }
 
     const pubsubChannel = options.pubsubChannel;
@@ -138,13 +141,11 @@ class DistributedCallbackQueue {
     return lock
       .acquire(lockRedisKey)
       .then(() => this.createWorker(lockRedisKey, lock))
-      .catch(notLockAcquisitionError, err => {
+      .catch(notLockAcquisitionError, err =>
         // this is an abnormal error, need to post it and cancel requests
         // so that they dont hang
-        return this
-          .publish(lockRedisKey, err)
-          .throw(err);
-      });
+        this.publish(lockRedisKey, err).throw(err)
+      );
   }
 
   /**
@@ -164,6 +165,21 @@ class DistributedCallbackQueue {
     return lock
       .acquire(lockRedisKey)
       .return(lock);
+  }
+
+  /**
+   * Acquires multi-lock. All or none strategy
+   * @param  {String[]} args - array of locks to acquire
+   * @return {MultiLock}
+   */
+  multi(...args) {
+    const actions = flatten(args);
+
+    return Promise
+      .map(actions, action => this.once(action).reflect())
+      .then(MultiLock.batchAction)
+      .catch(MultiLockError, MultiLock.cleanup)
+      .then(locks => new MultiLock(locks));
   }
 
   /**
@@ -209,4 +225,16 @@ class DistributedCallbackQueue {
  * Constructor for distributed callback queue
  * @type {DistributedCallbackQueue}
  */
-module.exports = DistributedCallbackQueue;
+module.exports = exports = DistributedCallbackQueue;
+
+/**
+ * Expose custom error type for MultiLock
+ * @type {MultiLockError}
+ */
+exports.MultiLockError = MultiLockError;
+
+/**
+ * Exposes MultiLock class
+ * @type {MultiLock}
+ */
+exports.MultiLock = MultiLock;

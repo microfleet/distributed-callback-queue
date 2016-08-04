@@ -1,4 +1,5 @@
 /* global describe, beforeEach, afterEach, it */
+/* eslint-disable import/no-extraneous-dependencies */
 const Promise = require('bluebird');
 const Redis = require('ioredis');
 const assert = require('assert');
@@ -136,6 +137,70 @@ describe('integration tests', () => {
             });
         })
         .catch(isLockAcquisitionError, failedToQueue)
+        .catch(unexpectedError);
+    })
+    .then(() => {
+      assert(job.calledOnce, 'job was called more than once');
+      assert.equal(failedToQueue.callCount, 9, 'unexpected error was raised');
+      assert.equal(unexpectedError.called, false, 'fatal error was raised');
+    });
+  });
+
+  it('#multi - able to acquire lock, extend it and release it', () => {
+    const job = sinon.spy();
+    const failedToQueue = sinon.spy();
+    const unexpectedError = sinon.spy();
+    const queueManager = this.queueManagers[0];
+
+    return queueManager
+      .dlock
+      .multi('1', '2')
+      .tap(job)
+      .tap(lock => lock.extend(10000))
+      .tap(job)
+      .tap(lock => lock.release())
+      .tap(job)
+      .catch(DLock.MultiLockError, failedToQueue)
+      .catch(unexpectedError)
+      .then(() => {
+        assert.equal(job.callCount, 3);
+        assert.ifError(failedToQueue.called, 'unexpected error was raised');
+        assert.ifError(unexpectedError.called, 'fatal error was raised');
+      });
+  });
+
+  it('#multi - rejects when it can not acquire multiple locks', () => {
+    const job = sinon.spy();
+    const failedToQueue = sinon.spy();
+    const unexpectedError = sinon.spy();
+    const queueManager = this.queueManagers[0];
+
+    return queueManager.dlock.once('1')
+      .tap(job)
+      .tap(() => queueManager.dlock.multi('1', '2', '3'))
+      .catch(DLock.MultiLockError, failedToQueue)
+      .catch(unexpectedError)
+      .then(() => {
+        assert.equal(job.callCount, 1);
+        assert.equal(failedToQueue.callCount, 1, 'unexpected error was raised');
+        assert.ifError(unexpectedError.called, 'fatal error was raised');
+      });
+  });
+
+  it('#multi - acquires one of locks concurrently', () => {
+    const job = sinon.spy();
+    const failedToQueue = sinon.spy();
+    const unexpectedError = sinon.spy();
+
+    return Promise.map(this.queueManagers, queueManager => {
+      return queueManager.dlock.multi('1', '2', '3')
+        .then(lock => (
+          Promise
+            .delay(1000)
+            .then(() => lock.release())
+            .then(job)
+        ))
+        .catch(DLock.MultiLockError, failedToQueue)
         .catch(unexpectedError);
     })
     .then(() => {

@@ -53,7 +53,7 @@ class DistributedCallbackQueue {
       delay: 100,
     });
 
-    const logger = this.logger = this.initLogger(options);
+    const logger = this.logger = DistributedCallbackQueue.initLogger(options);
 
     // put on the instance
     assign(this, {
@@ -71,7 +71,7 @@ class DistributedCallbackQueue {
     this.logger.info('Initialized...');
   }
 
-  initLogger(options) {
+  static initLogger(options) {
     const { log: logger, debug, name } = options;
     const loggerEnabled = typeof logger === 'undefined' ? !!debug : logger;
 
@@ -188,7 +188,7 @@ class DistributedCallbackQueue {
    * @param {String} lockRedisKey - key used for locking
    * @param {Object} lock - acquired lock
    * @returns {Function} worker - call with arguments that need to be passed to
-   *                            	all queued callbacks
+   *                              all queued callbacks
    */
   createWorker(lockRedisKey, lock) {
     const dlock = this;
@@ -213,7 +213,7 @@ class DistributedCallbackQueue {
           // by someone else
           return dlock.publish(lockRedisKey, err, ...args);
         })
-        .catch(error => {
+        .catch((error) => {
           // because a job may take too much time, other listeners must implement timeout/retry strategy
           dlock.logger.warn('failed to release lock and publish results', error);
         });

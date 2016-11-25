@@ -53,7 +53,7 @@ exports.createPublisher = function createPublisher(redis, pubsubChannel, logger)
     // post result to other processes
     redis
       .publish(pubsubChannel, JSON.stringify([lockRedisKey, args]))
-      .catch(err => {
+      .catch((err) => {
         logger.warn('failed to publish results', err);
       });
 
@@ -85,7 +85,7 @@ exports.createConsumer = function createConsumer(redis, pubsubChannel, logger) {
     .then(() => {
       logger.info('Subscribed to channel %s', pubsubChannel);
     })
-    .catch(err => {
+    .catch((err) => {
       logger.fatal('Failed to subsctibe to pubsub channel:', err);
       return Promise.delay(250).then(connect);
     });
@@ -129,7 +129,7 @@ exports._queue = () => queue;
  * For testing, allows overriding `call` func
  * @type {Function}
  */
-exports._setCall = fn => {
+exports._setCall = (fn) => {
   call = fn; // eslint-disable-line no-func-assign
 };
 

@@ -4,6 +4,14 @@
   "rules": {
     "no-param-reassign": [2,{"props": false}],
     "max-len": [0, 150],
-    "arrow-body-style": 0
+    "arrow-body-style": 0,
+    "no-underscore-dangle": 0,
+    "comma-dangle": ["error", {
+      "arrays": "always-multiline",
+      "objects": "always-multiline",
+      "imports": "never",
+      "exports": "never",
+      "functions": "never",
+    }]
   }
 }

@@ -21,7 +21,7 @@ class MultiLock {
       failed: [],
     };
 
-    locks.forEach(lock => {
+    locks.forEach((lock) => {
       if (lock.isRejected()) {
         accumulator.failed.push(lock.reason());
       } else {

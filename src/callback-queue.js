@@ -82,7 +82,7 @@ function tryParsing(message, logger) {
 exports.createConsumer = function createConsumer(redis, pubsubChannel, logger) {
   const connect = () => redis
     .subscribe(pubsubChannel)
-    .then(() => {
+    .tap(() => {
       logger.info('Subscribed to channel %s', pubsubChannel);
     })
     .catch((err) => {

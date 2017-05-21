@@ -1,6 +1,6 @@
 {
   "name": "dlock",
-  "version": "6.3.0",
+  "version": "6.4.0",
   "description": "Creates distributed callback queue based on redis pubsub. Pass 2 redis clients (supports redis sentinel as well for HA), manages locks across multiple processes",
   "main": "./lib/distributed-callback-queue.js",
   "scripts": {
@@ -30,13 +30,13 @@
   },
   "homepage": "https://github.com/AVVS/distributed-callback-queue",
   "peerDependencies": {
-    "ioredis": "~2.x.x"
+    "ioredis": "~2.x.x || ~3.x.x"
   },
   "dependencies": {
     "bluebird": "^3.4.6",
     "bunyan": "^1.8.5",
     "callback-queue": "^2.0.0",
-    "ioredis-lock": "^3.1.0",
+    "ioredis-lock": "^3.4.0",
     "lodash.assign": "^4.2.0",
     "lodash.defaults": "^4.2.0",
     "lodash.flatten": "^4.4.0",
@@ -49,11 +49,15 @@
     "babel-preset-stage-0": "^6.16.0",
     "babel-register": "^6.18.0",
     "eslint": "^3.10.2",
-    "eslint-config-airbnb-base": "^10.0.1",
+    "eslint-config-makeomatic": "^1.0.1",
     "eslint-plugin-import": "^2.2.0",
-    "ioredis": "^2.4.0",
-    "jest-cli": "^17.0.3",
+    "eslint-plugin-promise": "^3.5.0",
+    "ioredis": "^3.0.0",
+    "jest-cli": "^20.0.3",
     "mocha": "^3.2.0",
-    "sinon": "^1.17.6"
+    "sinon": "^2.2.0"
+  },
+  "engine": {
+    "node": "> 7.6.0"
   }
 }

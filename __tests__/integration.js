@@ -1,5 +1,3 @@
-/* global describe, beforeEach, afterEach, it */
-/* eslint-disable import/no-extraneous-dependencies */
 const Promise = require('bluebird');
 const Redis = require('ioredis');
 const assert = require('assert');
@@ -7,17 +5,21 @@ const DLock = require('..');
 const sinon = require('sinon');
 
 describe('integration tests', () => {
+  jest.setTimeout(10000);
+
   function QueueManager() {
-    this.redis = new Redis({ lazyConnect: true });
+    this.redis = new Redis({ host: 'redis', lazyConnect: true });
     this.pubsub = this.redis.duplicate();
     return Promise
       .join(this.redis.connect(), this.pubsub.connect())
       .then(() => {
         this.dlock = new DLock({
+          logger: true,
           client: this.redis,
           pubsub: this.pubsub,
           pubsubChannel: 'dlock',
         });
+        return null;
       })
       .return(this);
   }
@@ -26,13 +28,12 @@ describe('integration tests', () => {
     return e.name === 'LockAcquisitionError';
   }
 
-  beforeEach('creates queue managers', () => {
+  beforeEach(() => {
     return Promise
-      .map(Array(10), () => {
-        return new QueueManager();
-      })
-      .then(queueManagers => {
+      .map(new Array(10), () => new QueueManager())
+      .then((queueManagers) => {
         this.queueManagers = queueManagers;
+        return null;
       });
   });
 
@@ -43,21 +44,22 @@ describe('integration tests', () => {
     const failedToQueue = sinon.spy();
     const unexpectedError = sinon.spy();
 
-    return Promise.map(this.queueManagers, queueManager => {
+    return Promise.map(this.queueManagers, (queueManager) => {
       return queueManager.dlock
         .push('1', (...data) => onComplete(...data))
         .then(job)
         .catch(isLockAcquisitionError, failedToQueue)
         .catch(unexpectedError);
     })
-    .delay(600)
-    .then(() => {
-      assert(job.calledOnce, 'job was called more than once');
-      assert(onComplete.alwaysCalledWithExactly(...args), 'onComplete was called with incorrect args');
-      assert.equal(onComplete.callCount, 10, 'onComplete was called wrong amount of times');
-      assert.equal(failedToQueue.callCount, 9, 'unexpected error was raised');
-      assert.equal(unexpectedError.called, false, 'fatal error was raised');
-    });
+      .delay(600)
+      .then(() => {
+        assert(job.calledOnce, 'job was called more than once');
+        assert(onComplete.alwaysCalledWithExactly(...args), 'onComplete was called with incorrect args');
+        assert.equal(onComplete.callCount, 10, 'onComplete was called wrong amount of times');
+        assert.equal(failedToQueue.callCount, 9, 'unexpected error was raised');
+        assert.equal(unexpectedError.called, false, 'fatal error was raised');
+        return null;
+      });
   });
 
   it('#push: multiple jobs are completed only once', () => {
@@ -79,15 +81,16 @@ describe('integration tests', () => {
         .catch(isLockAcquisitionError, failedToQueue)
         .catch(unexpectedError);
     })
-    .delay(100)
-    .then(() => {
-      assert.equal(job.callCount, 3);
-      assert.equal(onComplete.withArgs('0', ...args).callCount, 4);
-      assert.equal(onComplete.withArgs('1', ...args).callCount, 3);
-      assert.equal(onComplete.withArgs('2', ...args).callCount, 3);
-      assert.equal(failedToQueue.callCount, 7, 'unexpected error was raised');
-      assert.equal(unexpectedError.called, false, 'fatal error was raised');
-    });
+      .delay(100)
+      .then(() => {
+        assert.equal(job.callCount, 3);
+        assert.equal(onComplete.withArgs('0', ...args).callCount, 4);
+        assert.equal(onComplete.withArgs('1', ...args).callCount, 3);
+        assert.equal(onComplete.withArgs('2', ...args).callCount, 3);
+        assert.equal(failedToQueue.callCount, 7, 'unexpected error was raised');
+        assert.equal(unexpectedError.called, false, 'fatal error was raised');
+        return null;
+      });
   });
 
   it('#push: when job fails onComplete is called with an error', () => {
@@ -97,27 +100,28 @@ describe('integration tests', () => {
     const failedToQueue = sinon.spy();
     const unexpectedError = sinon.spy();
 
-    return Promise.map(this.queueManagers, queueManager => {
+    return Promise.map(this.queueManagers, (queueManager) => {
       return queueManager.dlock
         .push('error', (...data) => onComplete(...data))
         .then(job)
         .catch(isLockAcquisitionError, failedToQueue)
         .catch(unexpectedError);
     })
-    .delay(100)
-    .then(() => {
-      assert(job.calledOnce, 'job was called more than once');
-      assert.equal(onComplete.callCount, 10, 'onComplete was called wrong amount of times');
-      onComplete.args.forEach(it => {
-        const [err] = it;
-        const { name, message, stack } = err;
-        assert.equal(args.name, name);
-        assert.equal(args.message, message);
-        assert.ok(stack);
+      .delay(100)
+      .then(() => {
+        assert(job.calledOnce, 'job was called more than once');
+        assert.equal(onComplete.callCount, 10, 'onComplete was called wrong amount of times');
+        onComplete.args.forEach((it) => {
+          const [err] = it;
+          const { name, message, stack } = err;
+          assert.equal(args.name, name);
+          assert.equal(args.message, message);
+          assert.ok(stack);
+        });
+        assert.equal(failedToQueue.callCount, 9, 'unexpected error was raised');
+        assert.equal(unexpectedError.called, false, 'fatal error was raised');
+        return null;
       });
-      assert.equal(failedToQueue.callCount, 9, 'unexpected error was raised');
-      assert.equal(unexpectedError.called, false, 'fatal error was raised');
-    });
   });
 
   it('#once - performs task once and rejects others', () => {
@@ -125,9 +129,9 @@ describe('integration tests', () => {
     const failedToQueue = sinon.spy();
     const unexpectedError = sinon.spy();
 
-    return Promise.map(this.queueManagers, queueManager => {
+    return Promise.map(this.queueManagers, (queueManager) => {
       return queueManager.dlock.once('once')
-        .then(lock => {
+        .then((lock) => {
           return Promise.delay(1000)
             .then(() => {
               return lock.release();
@@ -139,11 +143,12 @@ describe('integration tests', () => {
         .catch(isLockAcquisitionError, failedToQueue)
         .catch(unexpectedError);
     })
-    .then(() => {
-      assert(job.calledOnce, 'job was called more than once');
-      assert.equal(failedToQueue.callCount, 9, 'unexpected error was raised');
-      assert.equal(unexpectedError.called, false, 'fatal error was raised');
-    });
+      .then(() => {
+        assert(job.calledOnce, 'job was called more than once');
+        assert.equal(failedToQueue.callCount, 9, 'unexpected error was raised');
+        assert.equal(unexpectedError.called, false, 'fatal error was raised');
+        return null;
+      });
   });
 
   it('#multi - able to acquire lock, extend it and release it', () => {
@@ -166,6 +171,7 @@ describe('integration tests', () => {
         assert.equal(job.callCount, 3);
         assert.ifError(failedToQueue.called, 'unexpected error was raised');
         assert.ifError(unexpectedError.called, 'fatal error was raised');
+        return null;
       });
   });
 
@@ -184,6 +190,7 @@ describe('integration tests', () => {
         assert.equal(job.callCount, 1);
         assert.equal(failedToQueue.callCount, 1, 'unexpected error was raised');
         assert.ifError(unexpectedError.called, 'fatal error was raised');
+        return null;
       });
   });
 
@@ -192,30 +199,70 @@ describe('integration tests', () => {
     const failedToQueue = sinon.spy();
     const unexpectedError = sinon.spy();
 
-    return Promise.map(this.queueManagers, queueManager => {
-      return queueManager.dlock.multi('1', '2', '3')
-        .then(lock => (
-          Promise
-            .delay(1000)
-            .then(() => lock.release())
-            .then(job)
-        ))
-        .catch(DLock.MultiLockError, failedToQueue)
-        .catch(unexpectedError);
-    })
-    .then(() => {
-      assert(job.calledOnce, 'job was called more than once');
-      assert.equal(failedToQueue.callCount, 9, 'unexpected error was raised');
-      assert.equal(unexpectedError.called, false, 'fatal error was raised');
+    return Promise
+      .map(this.queueManagers, (queueManager) => {
+        return queueManager.dlock
+          .multi('1', '2', '3')
+          .then(lock => (
+            Promise
+              .delay(1000)
+              .then(() => lock.release())
+              .then(job)
+          ))
+          .catch(DLock.MultiLockError, failedToQueue)
+          .catch(unexpectedError);
+      })
+      .then(() => {
+        assert(job.calledOnce, 'job was called more than once');
+        assert.equal(failedToQueue.callCount, 9, 'unexpected error was raised');
+        assert.equal(unexpectedError.called, false, 'fatal error was raised');
+        return null;
+      });
+  });
+
+  describe('#semaphore', () => {
+    beforeEach(() => {
+      this.counter = 0;
+      this.semaphores = this.queueManagers.map(manager => (
+        manager.dlock.semaphore('test-semaphore')
+      ));
+    });
+
+    it('ensure each operation is processed serially', () => (
+      Promise
+        .map(Array(50), (_, i) => {
+          const semaphore = this.semaphores[i % this.semaphores.length];
+          return Promise.using(semaphore.take(), async () => {
+            process.stderr.write(this.counter);
+            process.stderr.write('\n');
+
+            this.counter += 1;
+            // if it's possible for other contestants
+            // to run out of semaphore lock - this.counter will
+            // increase multiple times before resolving following promise
+            await Promise.delay(10);
+
+            // return the counter
+            return this.counter - 1;
+          });
+        })
+        .then((args) => {
+          assert.equal(args.length, 50);
+          args.sort((a, b) => a - b).forEach((arg, i) => {
+            assert.equal(arg, i);
+          });
+          return null;
+        })
+    ));
+
+    afterEach(() => {
+      this.semaphores = null;
     });
   });
 
-  afterEach('cleans up redis', () => {
-    return this.queueManagers[0].redis.flushdb();
-  });
-
-  afterEach('disconnects clients', () => {
-    return Promise.map(this.queueManagers, queueManager => {
+  afterEach(async () => {
+    await this.queueManagers[0].redis.flushdb();
+    return Promise.map(this.queueManagers, (queueManager) => {
       return Promise.join(
         queueManager.redis.disconnect(),
         queueManager.pubsub.disconnect()

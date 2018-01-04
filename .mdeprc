@@ -1,0 +1,6 @@
+{
+  "nycCoverage": false,
+  "test_framework": "jest --coverage --coverageDirectory <coverageDirectory> --forceExit",
+  "tests": "__tests__/*.js",
+  "docker_compose": "__tests__/docker-compose.yml"
+}

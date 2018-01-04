@@ -1,14 +1,15 @@
 {
   "name": "dlock",
-  "version": "6.4.0",
+  "version": "0.0.0-development",
   "description": "Creates distributed callback queue based on redis pubsub. Pass 2 redis clients (supports redis sentinel as well for HA), manages locks across multiple processes",
   "main": "./lib/distributed-callback-queue.js",
   "scripts": {
-    "test": "npm run lint && mocha -r babel-register -R spec __tests__",
-    "pretest": "npm run compile",
+    "test": "yarn lint && mdep test run",
+    "pretest": "yarn compile",
+    "prepublish": "yarn compile",
     "lint": "eslint ./src",
-    "prepublish": "npm run compile",
-    "compile": "babel -d ./lib src"
+    "compile": "babel -d ./lib src",
+    "semantic-release": "semantic-release pre && npm publish && semantic-release post"
   },
   "repository": {
     "type": "git",
@@ -30,34 +31,66 @@
   },
   "homepage": "https://github.com/AVVS/distributed-callback-queue",
   "peerDependencies": {
-    "ioredis": "~2.x.x || ~3.x.x"
+    "ioredis": "~3.x.x"
   },
   "dependencies": {
-    "bluebird": "^3.4.6",
-    "bunyan": "^1.8.5",
+    "bluebird": "^3.5.1",
+    "bunyan": "^1.8.12",
     "callback-queue": "^2.0.0",
+    "denque": "^1.2.2",
     "ioredis-lock": "^3.4.0",
-    "lodash.assign": "^4.2.0",
-    "lodash.defaults": "^4.2.0",
-    "lodash.flatten": "^4.4.0",
+    "lodash": "^4.17.4",
     "serialize-error": "^2.1.0"
   },
   "devDependencies": {
-    "babel-cli": "^6.18.0",
-    "babel-eslint": "^7.1.1",
-    "babel-preset-es2015": "^6.18.0",
-    "babel-preset-stage-0": "^6.16.0",
-    "babel-register": "^6.18.0",
-    "eslint": "^3.10.2",
-    "eslint-config-makeomatic": "^1.0.1",
-    "eslint-plugin-import": "^2.2.0",
-    "eslint-plugin-promise": "^3.5.0",
-    "ioredis": "^3.0.0",
-    "jest-cli": "^20.0.3",
-    "mocha": "^3.2.0",
-    "sinon": "^2.2.0"
+    "@makeomatic/condition-semaphore": "^1.0.2",
+    "@makeomatic/deploy": "^4.1.9",
+    "@makeomatic/last-release-npm": "^1.0.1",
+    "babel-cli": "^6.26.0",
+    "babel-eslint": "^8.1.2",
+    "babel-plugin-istanbul": "^4.1.5",
+    "babel-plugin-transform-strict-mode": "^6.24.1",
+    "babel-register": "^6.26.0",
+    "codecov": "^3.0.0",
+    "cross-env": "^5.1.3",
+    "eslint": "^4.14.0",
+    "eslint-config-makeomatic": "^2.0.1",
+    "eslint-plugin-import": "^2.8.0",
+    "eslint-plugin-promise": "^3.6.0",
+    "github-post-release": "^1.13.1",
+    "ioredis": "^3.2.2",
+    "jest-cli": "^22.0.4",
+    "mocha": "^4.1.0",
+    "nyc": "^11.4.1",
+    "semantic-release": "8.x.x",
+    "simple-commit-message": "^4.0.0",
+    "sinon": "^4.1.3"
   },
   "engine": {
-    "node": ">= 7.6.0"
-  }
+    "node": ">= 8.9.0"
+  },
+  "release": {
+    "analyzeCommits": "simple-commit-message",
+    "generateNotes": "github-post-release",
+    "verifyConditions": "@makeomatic/condition-semaphore",
+    "getLastRelease": "@makeomatic/last-release-npm",
+    "branch": "master"
+  },
+  "config": {
+    "pre-git": {
+      "commit-msg": "simple",
+      "pre-commit": [],
+      "pre-push": [],
+      "post-commit": [],
+      "post-checkout": [],
+      "post-merge": []
+    }
+  },
+  "jest": {
+    "testEnvironment": "node"
+  },
+  "files": [
+    "src/",
+    "lib/"
+  ]
 }

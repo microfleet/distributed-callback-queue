@@ -1,19 +1,27 @@
 const Promise = require('bluebird');
-const defaults = require('lodash.defaults');
-const assign = require('lodash.assign');
-const callbackQueue = require('./callback-queue');
 const redislock = require('ioredis-lock');
 const Redis = require('ioredis');
 const bunyan = require('bunyan');
 const assert = require('assert');
-const flatten = require('lodash.flatten');
+
+// lodash helpers
+const assign = require('lodash/assign');
+const defaults = require('lodash/defaults');
+const flatten = require('lodash/fp/flatten');
+const filter = require('lodash/fp/filter');
+const compose = require('lodash/fp/compose');
+
+// internal deps
+const callbackQueue = require('./callback-queue');
+const Semaphore = require('./semaphore');
 const { MultiLock, MultiLockError } = require('./multi-lock');
 const pkg = require('../package.json');
 
 const { LockAcquisitionError } = redislock;
-function notLockAcquisitionError(e) {
-  return e.name !== 'LockAcquisitionError';
-}
+const notLockAcquisitionError = e => e.name !== 'LockAcquisitionError';
+const isBoolean = filter(Boolean);
+const toFlattenedTruthyArray = compose(isBoolean, flatten);
+const couldNotAcquireLockError = new LockAcquisitionError('job is already running');
 
 /**
  * @class DistributedCallbackQueue
@@ -33,9 +41,8 @@ function notLockAcquisitionError(e) {
  *    @param {String} lockPrefix - used for creating locks in redis
  */
 class DistributedCallbackQueue {
-
   constructor(options = {}) {
-    const client = options.client;
+    const { client } = options;
     assert.ok(client, 'options.client must be defined');
 
     const pubsub = options.pubsub || (typeof client.duplicate === 'function' ? client.duplicate({ lazyConnect: false }) : client);
@@ -43,7 +50,7 @@ class DistributedCallbackQueue {
       assert.notStrictEqual(client, pubsub, 'options.client and options.pubsub must have separate redis clients');
     }
 
-    const pubsubChannel = options.pubsubChannel;
+    const { pubsubChannel } = options;
     assert.ok(pubsubChannel, 'pubsubChannel must be specified');
 
     const lockOptions = defaults(options.lock || {}, {
@@ -130,7 +137,7 @@ class DistributedCallbackQueue {
     // this means that we already have local callback queue with that
     // identifier, don't try to lock it again and proceed further
     if (!queued) {
-      return Promise.reject(new LockAcquisitionError('job is already running'));
+      return Promise.reject(couldNotAcquireLockError);
     }
 
     // create lock
@@ -139,12 +146,17 @@ class DistributedCallbackQueue {
     // get the lock
     return lock
       .acquire(lockRedisKey)
-      .then(() => this.createWorker(lockRedisKey, lock))
-      .catch(notLockAcquisitionError, err =>
+      .return(this)
+      .call('createWorker', lockRedisKey, lock)
+      .tapCatch(notLockAcquisitionError, err => (
         // this is an abnormal error, need to post it and cancel requests
         // so that they dont hang
-        this.publish(lockRedisKey, err).throw(err)
-      );
+        this.publish(lockRedisKey, err)
+      ));
+  }
+
+  semaphore(bucket) {
+    return new Semaphore(this, bucket);
   }
 
   /**
@@ -172,7 +184,7 @@ class DistributedCallbackQueue {
    * @return {MultiLock}
    */
   multi(...args) {
-    const actions = flatten(args).filter(Boolean);
+    const actions = toFlattenedTruthyArray(args);
     assert(actions.length, 'at least 1 action must be supplied');
 
     return Promise
@@ -180,6 +192,58 @@ class DistributedCallbackQueue {
       .then(MultiLock.batchAction)
       .catch(MultiLockError, MultiLock.cleanup)
       .then(locks => new MultiLock(locks));
+  }
+
+  /**
+   * Creates real queue, which performs operations in the order they were added to it
+   * @param  {string} lockKey - Identifier, based on which we create the lock.
+   * @param  {Function(completed)} jobFunction - Accepts one arg, which is a fn, which must be called when work is done.
+   * @returns {Promise<*>}
+   */
+  serial(lockKey, jobFunction) {
+    const workUnit = (next) => {
+      let called = 0;
+      let rejected = false;
+
+      const done = (err) => {
+        // in case there are some remnants of this
+        if (called === true) return null;
+
+        // increase counter for further queueing
+        called += 1;
+
+        // error handling
+        if (err) {
+          // if we failed to acquire lock - do a noop
+          // and record failure of lock acquisition
+          if (err instanceof LockAcquisitionError) {
+            rejected = true;
+            return null;
+          }
+
+          // if it's not an acquisition error - then it's operational
+          // and we must end early with an error
+          return next(err);
+        }
+
+        // in-case that is not an error and call counter is 1 - simply return
+        // we must wait for the second call
+        if (called === 1) return null;
+
+        // if we were not rejected - return control
+        if (rejected === false) return next();
+
+        // try requeueing and basically repeating operation until it succeeds
+        return Promise.fromCallback(workUnit).asCallback(next);
+      };
+
+      return this
+        .push(lockKey, done)
+        .then(jobFunction)
+        .asCallback(done);
+    };
+
+    return Promise.fromCallback(workUnit);
   }
 
   /**
@@ -218,7 +282,6 @@ class DistributedCallbackQueue {
         });
     };
   }
-
 }
 
 /**

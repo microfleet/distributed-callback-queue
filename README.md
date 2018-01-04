@@ -24,7 +24,11 @@ const CallbackQueue = require('dlock');
 // one called `redis` and the other `pubsub`. They must be different clients
 // technically they can even connect to different redis instances machines,
 // since they are used for 2 separate tasks
+```
 
+### Sample configuration
+
+```js
 const opts = {
   client: redis,  // lock acquisition, can be shared with the rest of the app
   pubsub: pubsub, // pubsub, please do not share unless you know what you are doing
@@ -39,7 +43,14 @@ const opts = {
 };
 
 const callbackQueue = new CallbackQueue(opts);
+```
 
+### In-flight Request Caching
+
+Perform only 1 request and fan-out results via redis pubsub on the network, so that
+we never perform more than 1 requests to the same resource in parallel
+
+```js
 /**
  * Method push
  * Accepts following arguments:
@@ -81,7 +92,13 @@ function onJobCompleted(err, ...args) {
     // prints 2
     console.log(args[0]);
 }
+```
 
+### Distributed Resource Locking
+
+Allows to acquire lock across multiple processes with redis based lock
+
+```js
 /**
  * Method `once` - means there can only be 1 concurrent task
  * and callers will be rejected if they can't acquire lock
@@ -100,7 +117,16 @@ callbackQueue
   .catch(err => {
     // lock could not be acquire
   })
+```
 
+### Distributed Locking on Multiple Keys
+
+A little more complex lock, which ensures that we can acquire all locks from a list.
+When at least one lock is not acquired - we can't proceed further.
+This can be helpful in cases when partial resource can be altered in a separate action
+and side-effect from such event would affect further actions from a multi lock.
+
+```js
 /**
  * Method `multi` - similar to once, except that it expects to hold
  * multiple locks concurrently. This is useful when you want to perform non-atomic
@@ -135,5 +161,27 @@ callbackQueue
     // unexpected error - perhaps redis was offline
     // or timed out. ioredis-created errors would be defined here
   });
+```
 
+### Semaphore
+
+Ensures that all requests are processed one by one. It doesn't guarantee FIFO, but ensures that
+not more than 1 request runs at any given time.
+
+```js
+const Promise = require('bluebird');
+const semaphore = callbackQueue.semaphore('job:id');
+
+// option 1 - use disposer that will automatically call semaphore.leave
+Promise.using(semaphore.take(), () => {
+  // do some work, return promise
+});
+
+// option 2
+await semaphore.take();
+try {
+  // perform some async work and ensure we call leave afterwards
+} finally {
+  semaphore.leave();
+}
 ```

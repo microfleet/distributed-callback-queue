@@ -1,0 +1,22 @@
+version: '2'
+
+services:
+  redis:
+    image: redis:3.2.9-alpine
+    container_name: redis
+    hostname: redis
+    expose:
+      - 6379
+
+  tester:
+    image: makeomatic/node:9.3.0-tester
+    container_name: tester
+    hostname: tester
+    links:
+      - redis
+    working_dir: /src
+    volumes:
+      - ${PWD}:/src
+    environment:
+      NODE_ENV: "test"
+    command: tail -f /dev/null

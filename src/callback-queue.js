@@ -4,7 +4,7 @@ const serializeError = require('serialize-error');
 
 // callback buckets
 const queue = new Map();
-const isArray = Array.isArray;
+const { isArray } = Array;
 
 /**
  * Call functions stored in local queues

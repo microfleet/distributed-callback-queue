@@ -18,6 +18,9 @@ describe('integration tests', () => {
           client: this.redis,
           pubsub: this.pubsub,
           pubsubChannel: 'dlock',
+          lock: {
+            timeout: 2000,
+          },
         });
         return null;
       })
@@ -87,6 +90,31 @@ describe('integration tests', () => {
         assert.equal(onComplete.withArgs('0', ...args).callCount, 4);
         assert.equal(onComplete.withArgs('1', ...args).callCount, 3);
         assert.equal(onComplete.withArgs('2', ...args).callCount, 3);
+        assert.equal(failedToQueue.callCount, 7, 'unexpected error was raised');
+        assert.equal(unexpectedError.called, false, 'fatal error was raised');
+        return null;
+      });
+  });
+
+  it('#push: fails after timeout', () => {
+    const job = sinon.spy();
+    const onComplete = sinon.spy();
+    const failedToQueue = sinon.spy();
+    const unexpectedError = sinon.spy();
+
+    return Promise.map(this.queueManagers, (queueManager, idx) => {
+      const id = String(idx % 3);
+      return queueManager.dlock
+        .push(id, (...args) => onComplete(...args)) /* to ensure functions are unique */
+        .then(job)
+        .catch(isLockAcquisitionError, failedToQueue)
+        .catch(unexpectedError);
+    })
+      .delay(4500) /* must be called after timeout * 2 */
+      .then(() => {
+        assert.equal(job.callCount, 3);
+        assert.equal(onComplete.callCount, 10);
+        assert.equal(onComplete.withArgs(sinon.match({ message: 'queue-no-response' })).callCount, 10);
         assert.equal(failedToQueue.callCount, 7, 'unexpected error was raised');
         assert.equal(unexpectedError.called, false, 'fatal error was raised');
         return null;
@@ -233,9 +261,6 @@ describe('integration tests', () => {
         .map(Array(50), (_, i) => {
           const semaphore = this.semaphores[i % this.semaphores.length];
           return Promise.using(semaphore.take(), async () => {
-            process.stderr.write(this.counter);
-            process.stderr.write('\n');
-
             this.counter += 1;
             // if it's possible for other contestants
             // to run out of semaphore lock - this.counter will

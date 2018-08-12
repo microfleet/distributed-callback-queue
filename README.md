@@ -177,8 +177,8 @@ Promise.using(semaphore.take(), () => {
   // do some work, return promise
 });
 
-// option 2
-await semaphore.take();
+// option 2 - without disposer
+await semaphore.take(false);
 try {
   // perform some async work and ensure we call leave afterwards
 } finally {

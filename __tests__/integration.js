@@ -197,8 +197,8 @@ describe('integration tests', () => {
       .catch(unexpectedError)
       .then(() => {
         assert.equal(job.callCount, 3);
-        assert.ifError(failedToQueue.called, 'unexpected error was raised');
-        assert.ifError(unexpectedError.called, 'fatal error was raised');
+        assert.ok(!failedToQueue.called, 'unexpected error was raised');
+        assert.ok(!unexpectedError.called, 'fatal error was raised');
         return null;
       });
   });
@@ -217,7 +217,7 @@ describe('integration tests', () => {
       .then(() => {
         assert.equal(job.callCount, 1);
         assert.equal(failedToQueue.callCount, 1, 'unexpected error was raised');
-        assert.ifError(unexpectedError.called, 'fatal error was raised');
+        assert.ok(!unexpectedError.called, 'fatal error was raised');
         return null;
       });
   });

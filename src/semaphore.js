@@ -15,10 +15,15 @@ class Semaphore {
     this._take = this._take.bind(this);
   }
 
-  take() {
-    return Promise
-      .fromCallback(this._take)
-      .disposer(this.leave);
+  take(disposer = true) {
+    const promise = Promise.fromCallback(this._take);
+
+    // with disposer by default
+    if (disposer === true) {
+      return promise.disposer(this.leave);
+    }
+
+    return promise;
   }
 
   _take(next) {
@@ -40,9 +45,11 @@ class Semaphore {
       })
       .catch((e) => {
         this.dlock.logger.error('semaphore operational error', e);
-        return Promise.bind(this, next)
+        return Promise
           .delay(50)
-          .then(this._take);
+          .return(next)
+          .then(this._take)
+          .then(this.next);
       });
   }
 

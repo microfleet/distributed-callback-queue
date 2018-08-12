@@ -1,6 +1,6 @@
 {
   "plugins": [
-    "transform-strict-mode"
+    "@babel/plugin-transform-strict-mode"
   ],
   "env": {
     "test": {

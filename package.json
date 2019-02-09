@@ -31,7 +31,7 @@
   },
   "homepage": "https://github.com/AVVS/distributed-callback-queue",
   "peerDependencies": {
-    "ioredis": "~3.x.x"
+    "ioredis": "~4.x.x"
   },
   "dependencies": {
     "bluebird": "^3.5.1",

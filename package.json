@@ -1,6 +1,6 @@
 {
   "name": "dlock",
-  "version": "0.0.0-development",
+  "version": "0.0.0",
   "description": "Creates distributed callback queue based on redis pubsub. Pass 2 redis clients (supports redis sentinel as well for HA), manages locks across multiple processes",
   "main": "./lib/distributed-callback-queue.js",
   "scripts": {
@@ -9,9 +9,7 @@
     "prepare": "yarn compile",
     "lint": "eslint ./src",
     "compile": "babel -d ./lib src",
-    "semantic-release": "semantic-release",
-    "commitmsg": "commitlint -e $GIT_PARAMS",
-    "preparecommitmsg": "./node_modules/@makeomatic/deploy/git-hooks/prepare-commit-msg $GIT_PARAMS"
+    "semantic-release": "semantic-release"
   },
   "repository": {
     "type": "git",
@@ -26,7 +24,7 @@
     "pubsub",
     "redis"
   ],
-  "author": "Vitaly Aminev <v@makeomatic.ru>",
+  "author": "Vitaly Aminev <v@makeomatic.ca>",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/AVVS/distributed-callback-queue/issues"
@@ -40,33 +38,27 @@
     "bunyan": "^1.8.12",
     "callback-queue": "^2.0.0",
     "denque": "^1.3.0",
-    "ioredis-lock": "^3.4.0",
+    "ioredis-lock": "^4.0.0",
     "lodash": "^4.17.10",
-    "serialize-error": "^2.1.0"
+    "serialize-error": "^3.0.0"
   },
   "devDependencies": {
-    "@babel/cli": "^7.0.0-rc.1",
-    "@babel/core": "^7.0.0-rc.1",
+    "@babel/cli": "^7.2.3",
     "@babel/plugin-transform-strict-mode": "^7.0.0-rc.1",
-    "@babel/register": "^7.0.0-rc.1",
     "@makeomatic/condition-semaphore": "^2.0.0",
-    "@makeomatic/deploy": "^7.0.1",
+    "@makeomatic/deploy": "^8.3.1",
     "@makeomatic/last-release-npm": "^1.0.1",
-    "babel-core": "^7.0.0-0",
-    "babel-eslint": "^8.2.6",
-    "babel-jest": "^23.4.2",
+    "babel-eslint": "^10.0.1",
     "babel-plugin-istanbul": "^5.0.0",
     "codecov": "^3.0.4",
     "cross-env": "^5.2.0",
     "eslint": "^5.3.0",
     "eslint-config-makeomatic": "^3.0.0",
     "eslint-plugin-import": "^2.13.0",
-    "eslint-plugin-promise": "^3.8.0",
-    "ioredis": "^3.2.2",
-    "jest-cli": "^23.5.0",
-    "mocha": "^5.2.0",
-    "nyc": "^12.0.2",
-    "sinon": "^6.1.5"
+    "eslint-plugin-promise": "^4.0.1",
+    "ioredis": "^4.6.2",
+    "jest": "^24.1.0",
+    "sinon": "^7.2.3"
   },
   "engine": {
     "node": ">= 8.9.0"
@@ -77,5 +69,11 @@
   "files": [
     "src/",
     "lib/"
-  ]
+  ],
+  "husky": {
+    "hooks": {
+      "commit-msg": "commitlint -e $HUSKY_GIT_PARAMS",
+      "prepare-commit-msg": "./node_modules/@makeomatic/deploy/git-hooks/prepare-commit-msg $HUSKY_GIT_PARAMS"
+    }
+  }
 }

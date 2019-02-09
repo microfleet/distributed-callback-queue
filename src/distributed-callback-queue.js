@@ -4,6 +4,9 @@ const Redis = require('ioredis');
 const bunyan = require('bunyan');
 const assert = require('assert');
 
+// may only use redis with bluebird promise
+Redis.Promise = Promise;
+
 // lodash helpers
 const assign = require('lodash/assign');
 const defaults = require('lodash/defaults');

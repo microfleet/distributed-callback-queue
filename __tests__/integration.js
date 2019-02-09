@@ -289,8 +289,8 @@ describe('integration tests', () => {
     await this.queueManagers[0].redis.flushdb();
     return Promise.map(this.queueManagers, (queueManager) => {
       return Promise.join(
-        queueManager.redis.disconnect(),
-        queueManager.pubsub.disconnect()
+        queueManager.redis.quit(),
+        queueManager.pubsub.quit()
       );
     });
   });

@@ -1,4 +1,5 @@
 {
+  "node": "10.15.1",
   "nycCoverage": false,
   "test_framework": "jest --coverage --coverageDirectory <coverageDirectory> --forceExit",
   "tests": "__tests__/*.js",

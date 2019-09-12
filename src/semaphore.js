@@ -43,8 +43,8 @@ class Semaphore {
         this.dlock.logger.debug('failed to acquire lock');
         this._take(next);
       })
-      .catch((e) => {
-        this.dlock.logger.error('semaphore operational error', e);
+      .catch((err) => {
+        this.dlock.logger.error({ err }, 'semaphore operational error');
         return Promise
           .delay(50)
           .return(next)

@@ -11,10 +11,10 @@ const { isArray } = Array;
  * @param  {String} queueName
  * @param  {Array} args
  */
-function call(queueName, args, logger) {
+async function call(queueName, args, logger) {
   const callback = queue.get(queueName);
   if (!callback) {
-    return Promise.reject(new Error('callback called multiple times'));
+    throw new Error('callback called multiple times');
   }
 
   // these are async anyways - gonna schedule them
@@ -23,7 +23,6 @@ function call(queueName, args, logger) {
 
   // clean local queue
   queue.delete(queueName);
-  return Promise.resolve();
 }
 
 /**
@@ -46,7 +45,7 @@ exports.add = function add(key, callback) {
  * @param {Object} redis
  */
 exports.createPublisher = function createPublisher(redis, pubsubChannel, logger) {
-  return function publishResult(lockRedisKey, ...args) {
+  return async function publishResult(lockRedisKey, ...args) {
     // serialize error if it's present
     args[0] = args[0] ? serializeError(args[0]) : null;
 
@@ -54,12 +53,16 @@ exports.createPublisher = function createPublisher(redis, pubsubChannel, logger)
     redis
       .publish(pubsubChannel, JSON.stringify([lockRedisKey, args]))
       .catch((err) => {
-        logger.warn('failed to publish results', err);
+        logger.warn({ err }, 'failed to publish results');
       });
 
     // call local queue for faster processing
     // we don't care here if it fails, it could've been already processed
-    return call(lockRedisKey, args, logger).reflect();
+    try {
+      await call(lockRedisKey, args, logger);
+    } catch (err) {
+      logger.warn({ err, lockRedisKey }, 'failed to perform call');
+    }
   };
 };
 
@@ -70,7 +73,7 @@ function tryParsing(message, logger) {
   try {
     return JSON.parse(message);
   } catch (e) {
-    logger.warn('Cant parse message %s', message);
+    logger.warn({ message }, 'Cant parse message');
     return null;
   }
 }
@@ -93,45 +96,35 @@ exports.createConsumer = function createConsumer(redis, pubsubChannel, logger) {
   // init connection
   connect();
 
-  return function redisEventListener(channel, _message) {
+  return async function redisEventListener(channel, _message) {
     if (channel.toString() !== pubsubChannel) {
-      return null;
+      return;
     }
 
     const message = tryParsing(_message, logger);
     if (!isArray(message)) {
-      return null;
+      return;
     }
 
     const [key, args] = message;
     if (!key || !isArray(args)) {
       logger.warn('Malformed message passed: no key or args.', message);
-      return null;
+      return;
     }
 
     // no listeners here
     // eat the error
-    return call(key, args, logger).reflect();
+    try {
+      await call(key, args, logger);
+    } catch (err) {
+      logger.warn({ err }, 'call failed');
+    }
   };
 };
 
 // //////////////////////////////////////////////////////////////////////////////
 // Private section
 // //////////////////////////////////////////////////////////////////////////////
-
-/**
- * Returns internal queue, used for testing
- * @return {Object}
- */
-exports._queue = () => queue;
-
-/**
- * For testing, allows overriding `call` func
- * @type {Function}
- */
-exports._setCall = (fn) => {
-  call = fn; // eslint-disable-line no-func-assign
-};
 
 /**
  * Reference to original call function,

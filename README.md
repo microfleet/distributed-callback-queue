@@ -94,6 +94,38 @@ function onJobCompleted(err, ...args) {
 }
 ```
 
+### Async/Await in-flight request caching
+
+#### Fanout(jobId: String, [timeout: Number], job: Function)
+
+Use `fanout(...)` method for the easiest way to handle job subscriptions where
+one actor must perform long-running job, but as soon as it's done - everyone who
+queued for the results of this job must be notified.
+
+Sample of code is provided to make use of this feature:
+
+```js
+const jobId = 'xxx';
+const job = async () => {
+  await Promise.delay(10000);
+  return 'done';
+}
+
+let result;
+try {
+  result = await callbackQueue.fanout(jobId, 2000, job);
+} catch (e) {
+  // handle timeout error - because it will fail
+}
+
+try {
+  result = await callbackQueue.fanout(jobId, 20000, job);
+  // result will be equal 'done'
+} catch (e) {
+  // no error is expected, but make sure you handle unexpected cases
+}
+```
+
 ### Distributed Resource Locking
 
 Allows to acquire lock across multiple processes with redis based lock

@@ -21,11 +21,12 @@ const { MultiLock, MultiLockError } = require('./multi-lock');
 const pkg = require('../package.json');
 
 const { LockAcquisitionError } = redislock;
-const notLockAcquisitionError = e => e.name !== 'LockAcquisitionError';
 const isBoolean = filter(Boolean);
 const toFlattenedTruthyArray = compose(isBoolean, flatten);
 const couldNotAcquireLockError = new LockAcquisitionError('job is already running');
 const TimeoutError = new Promise.TimeoutError('queue-no-response');
+const notLockAcquisitionError = (e) => e.name !== 'LockAcquisitionError';
+const isTimeoutError = (e) => e === TimeoutError;
 
 /**
  * @class DistributedCallbackQueue
@@ -132,7 +133,7 @@ class DistributedCallbackQueue {
    * @returns {Promise} if promise is resolved then we must act, if it's rejected - then
    *                    somebody else is working on the same task right now
    */
-  push(suffix, next, timeout = this.lockOptions.timeout * 2) {
+  async push(suffix, next, timeout = this.lockOptions.timeout * 2) {
     assert(suffix, 'must be a truthy string');
 
     // first queue locally to make use of pending requests
@@ -142,12 +143,19 @@ class DistributedCallbackQueue {
     // this means that we already have local callback queue with that
     // identifier, don't try to lock it again and proceed further
     if (!queued) {
-      return Promise.reject(couldNotAcquireLockError);
+      throw couldNotAcquireLockError;
     }
 
     if (timeout) {
       /* we are first in the local queue */
-      const onTimeout = setTimeout(callbackQueue._call, timeout, lockRedisKey, [TimeoutError], this.logger);
+      const onTimeout = setTimeout(
+        callbackQueue._call,
+        timeout,
+        lockRedisKey,
+        [TimeoutError],
+        this.logger
+      );
+
       /* if we have no response from dlock -> without timeout, clean local queue */
       callbackQueue.add(lockRedisKey, () => clearTimeout(onTimeout));
     }
@@ -156,15 +164,85 @@ class DistributedCallbackQueue {
     const lock = this.getLock();
 
     // get the lock
-    return lock
-      .acquire(lockRedisKey)
-      .return(this)
-      .call('createWorker', lockRedisKey, lock)
-      .tapCatch(notLockAcquisitionError, err => (
+    try {
+      await lock.acquire(lockRedisKey);
+      return await this.createWorker(lockRedisKey, lock);
+    } catch (e) {
+      if (notLockAcquisitionError(e)) {
         // this is an abnormal error, need to post it and cancel requests
         // so that they dont hang
-        this.publish(lockRedisKey, err)
-      ));
+        await this.publish(lockRedisKey, e);
+      }
+
+      throw e;
+    }
+  }
+
+  /**
+   * Provides a helper over push method to be able to perform the same
+   * work using promises with async/await style
+   *
+   * @param {String} suffix job key
+   * @param {Number} [timeout] when job is considered to be failed and error is returned instead
+   * @param {Function} worker async job to be performed by the party that gets the lock
+   *
+   * @return {Function} job handler that must be invoked with a worker that returns a promise
+   */
+  async fanout(suffix, ...props) {
+    // verify we've got correct args in
+    assert(props.length >= 1 && props.length <= 2);
+    const worker = props.pop();
+    const timeout = props.pop();
+    assert(typeof worker === 'function', 'ensure that you pass a function as a worker');
+
+    let onJobCompleted;
+    const promise = new Promise((resolve, reject) => {
+      onJobCompleted = (err, ...args) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        resolve(...args);
+      };
+    });
+
+    let onCompleted;
+    try {
+      onCompleted = await this.push(suffix, onJobCompleted, timeout);
+    } catch (err) {
+      if (notLockAcquisitionError(err)) {
+        setImmediate(onJobCompleted, err);
+        return promise;
+      }
+
+      return promise;
+    }
+
+    // wrap so that we have concept of "cancelling" work
+    const performWork = worker();
+
+    try {
+      const result = await Promise.race([
+        performWork,
+        promise,
+      ]);
+
+      setImmediate(onCompleted, null, result);
+    } catch (err) {
+      // only local timeouts would trigger this as we do strict equality
+      // if there is cancel method available on the job - we'll call it
+      if (isTimeoutError(err) && typeof performWork.cancel === 'function') {
+        performWork.cancel();
+      }
+
+      // broadcast this everywhere so that others dont wait for longer than needed
+      // as the result will fail either way
+      setImmediate(onCompleted, err);
+    }
+
+    // in some cases may already be resolved/rejected
+    return promise;
   }
 
   semaphore(bucket) {
@@ -200,10 +278,10 @@ class DistributedCallbackQueue {
     assert(actions.length, 'at least 1 action must be supplied');
 
     return Promise
-      .map(actions, action => this.once(action).reflect())
+      .map(actions, (action) => this.once(action).reflect())
       .then(MultiLock.batchAction)
       .catch(MultiLockError, MultiLock.cleanup)
-      .then(locks => new MultiLock(locks));
+      .then((locks) => new MultiLock(locks));
   }
 
   /**
@@ -261,11 +339,11 @@ class DistributedCallbackQueue {
   /**
    * Returns function that should be called with the result of the work
    * @param {String} lockRedisKey - key used for locking
-   * @param {Object} lock - acquired lock
+   * @param {Object} acquiredLock - acquired lock
    * @returns {Function} worker - call with arguments that need to be passed to
    *                              all queued callbacks
    */
-  createWorker(lockRedisKey, lock) {
+  createWorker(lockRedisKey, acquiredLock) {
     /**
      * This function must be called when job has been completed
      * @param  {Error} err
@@ -273,6 +351,15 @@ class DistributedCallbackQueue {
      */
     const broadcastJobStatus = async (err, ...args) => {
       /* clen ref */
+      const { lock } = broadcastJobStatus;
+
+      // because a job may take too much time, other listeners must implement timeout/retry strategy
+      if (lock == null) {
+        this.logger.error('lock was already released');
+        return null;
+      }
+
+      // clean ref
       broadcastJobStatus.lock = null;
 
       // must release lock now. Technically there could be an event
@@ -294,15 +381,17 @@ class DistributedCallbackQueue {
       // at this point we are sure that this job still belongs to us,
       // if it doesn't - we can't publish response, because this task may be acquired
       // by someone else
-      return this
-        .publish(lockRedisKey, err, ...args)
+      try {
+        return await this.publish(lockRedisKey, err, ...args);
+      } finally {
         /* ensure we release the lock once publish is completed */
         /* during race conditions we rely on _retry_ setting to re-acquire lock */
-        .finally(() => lock.release().reflect());
+        lock.release().reflect();
+      }
     };
 
     // set associated lock -> lengthy jobs must extend this
-    broadcastJobStatus.lock = lock;
+    broadcastJobStatus.lock = acquiredLock;
 
     return broadcastJobStatus;
   }

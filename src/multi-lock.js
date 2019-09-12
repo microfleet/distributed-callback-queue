@@ -1,14 +1,6 @@
 const Promise = require('bluebird');
 const assert = require('assert');
-
-// aggregate error
-class MultiLockError extends Promise.AggregateError {
-  constructor(errors, locks) {
-    super(errors);
-    this.name = 'MultiLockError';
-    this.locks = locks;
-  }
-}
+const { MultiLockError } = require('./multi-lock-error');
 
 class MultiLock {
   constructor(locks) {
@@ -43,7 +35,7 @@ class MultiLock {
     const locks = isError ? _locks.locks : _locks;
 
     return Promise
-      .map(locks, lock => lock.release().reflect())
+      .map(locks, (lock) => lock.release().reflect())
       .tap(() => {
         if (!isError) {
           return null;
@@ -58,7 +50,7 @@ class MultiLock {
     assert(time > 0, '`time` must be greater than 0');
 
     return Promise
-      .map(this.vault, lock => lock.extend(time).reflect())
+      .map(this.vault, (lock) => lock.extend(time).reflect())
       .then(MultiLock.batchAction)
       .catch(MultiLockError, MultiLock.cleanup);
   }

@@ -1,7 +1,7 @@
 {
-  "node": "10.15.1",
+  "node": "10.16.3",
   "nycCoverage": false,
-  "test_framework": "jest --coverage --coverageDirectory <coverageDirectory> --forceExit",
+  "test_framework": "jest --coverage --coverageDirectory <coverageDirectory>",
   "tests": "__tests__/*.js",
   "docker_compose": "__tests__/docker-compose.yml"
 }

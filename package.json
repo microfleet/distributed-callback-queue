@@ -44,6 +44,7 @@
   },
   "devDependencies": {
     "@babel/cli": "^7.6.0",
+    "@babel/core": "^7.6.0",
     "@babel/plugin-transform-strict-mode": "^7.0.0",
     "@makeomatic/deploy": "^8.4.7",
     "codecov": "^3.5.0",

@@ -1,6 +1,6 @@
 const Promise = require('bluebird');
 const callbackQueue = require('callback-queue');
-const serializeError = require('serialize-error');
+const { serializeError, deserializeError } = require('serialize-error');
 
 // callback buckets
 const queue = new Map();
@@ -115,6 +115,7 @@ exports.createConsumer = function createConsumer(redis, pubsubChannel, logger) {
     // no listeners here
     // eat the error
     try {
+      if (args[0]) args[0] = deserializeError(args[0]);
       await call(key, args, logger);
     } catch (err) {
       logger.warn({ err }, 'call failed');

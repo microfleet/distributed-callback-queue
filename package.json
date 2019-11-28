@@ -43,16 +43,17 @@
     "serialize-error": "^5.0.0"
   },
   "devDependencies": {
-    "@babel/cli": "^7.6.4",
-    "@babel/core": "^7.6.4",
-    "@babel/plugin-transform-strict-mode": "^7.0.0",
-    "@makeomatic/deploy": "^9.3.2",
+    "@babel/cli": "^7.7.4",
+    "@babel/core": "^7.7.4",
+    "@babel/plugin-transform-strict-mode": "^7.7.4",
+    "@makeomatic/deploy": "^9.5.0",
     "codecov": "^3.6.1",
     "cross-env": "^6.0.3",
-    "eslint": "^6.5.1",
+    "eslint": "^6.7.1",
     "eslint-config-makeomatic": "^4.0.0",
     "eslint-plugin-import": "^2.18.2",
     "eslint-plugin-promise": "^4.2.1",
+    "eslint-plugin-unicorn": "^13.0.0",
     "ioredis": "^4.14.1",
     "jest": "^24.9.0",
     "sinon": "^7.5.0"

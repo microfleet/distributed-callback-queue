@@ -45,23 +45,23 @@ exports.add = function add(key, callback) {
  * @param {Object} redis
  */
 exports.createPublisher = function createPublisher(redis, pubsubChannel, logger) {
-  return async function publishResult(lockRedisKey, ...args) {
-    // serialize error if it's present
-    args[0] = args[0] ? serializeError(args[0]) : null;
+  return async function publishResult(lockRedisKey, err, ...args) {
+    const broadcastArgs = [err ? serializeError(err) : null, ...args];
+    const localArgs = [err, ...args];
 
     // post result to other processes
     redis
-      .publish(pubsubChannel, JSON.stringify([lockRedisKey, args]))
-      .catch((err) => {
-        logger.warn({ err }, 'failed to publish results');
+      .publish(pubsubChannel, JSON.stringify([lockRedisKey, broadcastArgs]))
+      .catch((e) => {
+        logger.warn({ err: e }, 'failed to publish results');
       });
 
     // call local queue for faster processing
     // we don't care here if it fails, it could've been already processed
     try {
-      await call(lockRedisKey, args, logger);
-    } catch (err) {
-      logger.warn({ err, lockRedisKey }, 'failed to perform call');
+      await call(lockRedisKey, localArgs, logger);
+    } catch (e) {
+      logger.warn({ err: e, lockRedisKey }, 'failed to perform call');
     }
   };
 };

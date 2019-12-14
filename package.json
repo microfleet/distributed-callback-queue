@@ -5,6 +5,7 @@
   "main": "./lib/distributed-callback-queue.js",
   "scripts": {
     "test": "yarn lint && mdep test run",
+    "test:local": "yarn lint && yarn compile && jest __tests__/*.js",
     "pretest": "yarn compile",
     "prepare": "yarn compile",
     "lint": "eslint ./src",

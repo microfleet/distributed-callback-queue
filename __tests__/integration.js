@@ -2,6 +2,7 @@ const Promise = require('bluebird');
 const Redis = require('ioredis');
 const assert = require('assert');
 const sinon = require('sinon');
+const { noop } = require('lodash');
 const DLock = require('..');
 
 describe('integration tests', () => {
@@ -257,6 +258,41 @@ describe('integration tests', () => {
     });
 
     assert.equal(job.callCount, 3);
+    assert.equal(onComplete.callCount, 0);
+    assert.equal(timeoutError.callCount, 10);
+    assert.equal(timeoutError.withArgs(sinon.match({ message: 'queue-no-response' })).callCount, 10);
+    assert.equal(unexpectedError.called, false, 'fatal error was raised');
+  });
+
+  it('#fanout: fails after timeout even if lock has not been acquired', async () => {
+    const job = sinon.spy(async () => {
+      await Promise.delay(3000);
+    });
+    const onComplete = sinon.spy();
+    const timeoutError = sinon.spy();
+    const unexpectedError = sinon.spy();
+    const unacquirableLock = new Promise(noop);
+
+    await Promise.map(this.queueManagers, async (queueManager, idx) => {
+      const id = String(idx % 3);
+
+      sinon.stub(queueManager.dlock, 'getLock').returns({
+        acquire: () => unacquirableLock,
+      });
+
+      try {
+        const result = await queueManager.dlock.fanout(id, 1500, job);
+        onComplete(result);
+      } catch (e) {
+        if (e.message === 'queue-no-response') {
+          timeoutError(e);
+        } else {
+          unexpectedError(e);
+        }
+      }
+    });
+
+    assert.equal(job.callCount, 0, 'lock was acquired, jobs were called');
     assert.equal(onComplete.callCount, 0);
     assert.equal(timeoutError.callCount, 10);
     assert.equal(timeoutError.withArgs(sinon.match({ message: 'queue-no-response' })).callCount, 10);

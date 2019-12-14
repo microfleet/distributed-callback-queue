@@ -195,10 +195,23 @@ class DistributedCallbackQueue {
     const timeout = props.pop();
     assert(typeof worker === 'function', 'ensure that you pass a function as a worker');
 
+    // allows us to reject-and-halt (eg. on timeout) even if the #push'ed lock has not yet been acquired
+    let jobAbortReject;
+    let jobAbortPromise = new Promise((resolve, reject) => {
+      jobAbortReject = reject;
+    });
+
     let onJobCompleted;
-    const promise = new Promise((resolve, reject) => {
+    const jobCompletedPromise = new Promise((resolve, reject) => {
       onJobCompleted = (err, ...args) => {
         if (err) {
+          if (jobAbortPromise) {
+            // ensure that jobAbortPromise rejects *first* so that we can return jobCompletedPromise *before* it rejects
+            jobAbortReject(err);
+            setImmediate(reject, err);
+            return;
+          }
+
           reject(err);
           return;
         }
@@ -209,14 +222,21 @@ class DistributedCallbackQueue {
 
     let onCompleted;
     try {
-      onCompleted = await this.push(suffix, onJobCompleted, timeout);
+      const pushPromise = this.push(suffix, onJobCompleted, timeout);
+      onCompleted = await Promise.race([
+        pushPromise,
+        jobAbortPromise,
+      ]);
+
+      jobAbortPromise = undefined;
     } catch (err) {
+      jobAbortPromise = undefined; // finally {} is too late
       if (notLockAcquisitionError(err)) {
         setImmediate(onJobCompleted, err);
-        return promise;
+        return jobCompletedPromise;
       }
 
-      return promise;
+      return jobCompletedPromise;
     }
 
     // wrap so that we have concept of "cancelling" work
@@ -225,7 +245,7 @@ class DistributedCallbackQueue {
     try {
       const result = await Promise.race([
         performWork,
-        promise,
+        jobCompletedPromise,
       ]);
 
       setImmediate(onCompleted, null, result);
@@ -242,7 +262,7 @@ class DistributedCallbackQueue {
     }
 
     // in some cases may already be resolved/rejected
-    return promise;
+    return jobCompletedPromise;
   }
 
   semaphore(bucket) {

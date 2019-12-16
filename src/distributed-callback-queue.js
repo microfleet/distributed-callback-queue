@@ -228,9 +228,13 @@ class DistributedCallbackQueue {
         jobAbortPromise,
       ]);
 
+      jobAbortReject = undefined;
       jobAbortPromise = undefined;
     } catch (err) {
-      jobAbortPromise = undefined; // finally {} is too late
+      // doing this in finally {} is too late
+      jobAbortReject = undefined;
+      jobAbortPromise = undefined;
+
       if (notLockAcquisitionError(err)) {
         setImmediate(onJobCompleted, err);
         return jobCompletedPromise;

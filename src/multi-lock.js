@@ -13,13 +13,13 @@ class MultiLock {
       failed: [],
     };
 
-    locks.forEach((lock) => {
+    for (const lock of locks.values()) {
       if (lock.isRejected()) {
         accumulator.failed.push(lock.reason());
       } else {
         accumulator.vault.push(lock.value());
       }
-    });
+    }
 
     // throw aggregate error if we have failed
     if (accumulator.failed.length > 0) {
@@ -46,7 +46,7 @@ class MultiLock {
   }
 
   // if extend fails we cleanup remaining locks
-  extend(time) {
+  extend(time = 10000) {
     assert(time > 0, '`time` must be greater than 0');
 
     return Promise

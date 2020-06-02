@@ -9,7 +9,7 @@ describe('integration tests', () => {
   jest.setTimeout(10000);
 
   function QueueManager() {
-    this.redis = new Redis({ host: 'redis', lazyConnect: true });
+    this.redis = new Redis({ sentinels: [{ host: 'redis-sentinel', port: 26379 }], name: 'mservice', lazyConnect: true });
     this.pubsub = this.redis.duplicate();
     return Promise
       .join(this.redis.connect(), this.pubsub.connect())

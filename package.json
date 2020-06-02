@@ -41,26 +41,26 @@
     "denque": "^1.4.1",
     "ioredis-lock": "^4.0.0",
     "lodash": "^4.17.15",
-    "serialize-error": "^5.0.0"
+    "serialize-error": "^7.0.1"
   },
   "devDependencies": {
-    "@babel/cli": "^7.7.4",
-    "@babel/core": "^7.7.4",
-    "@babel/plugin-transform-strict-mode": "^7.7.4",
-    "@makeomatic/deploy": "^9.5.0",
-    "codecov": "^3.6.1",
-    "cross-env": "^6.0.3",
-    "eslint": "^6.7.1",
-    "eslint-config-makeomatic": "^4.0.0",
-    "eslint-plugin-import": "^2.18.2",
+    "@babel/cli": "^7.10.1",
+    "@babel/core": "^7.10.2",
+    "@babel/plugin-transform-strict-mode": "^7.10.1",
+    "@makeomatic/deploy": "^10.2.1",
+    "codecov": "^3.7.0",
+    "cross-env": "^7.0.2",
+    "eslint": "^7.1.0",
+    "eslint-config-makeomatic": "^5.0.0",
+    "eslint-plugin-import": "^2.20.2",
     "eslint-plugin-promise": "^4.2.1",
-    "eslint-plugin-unicorn": "^13.0.0",
-    "ioredis": "^4.14.1",
-    "jest": "^24.9.0",
-    "sinon": "^7.5.0"
+    "eslint-plugin-unicorn": "^20.1.0",
+    "ioredis": "^4.17.3",
+    "jest": "^26.0.1",
+    "sinon": "^9.0.2"
   },
   "engine": {
-    "node": ">= 10.15.0"
+    "node": ">= 12.15.0"
   },
   "jest": {
     "testEnvironment": "node",

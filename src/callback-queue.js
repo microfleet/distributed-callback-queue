@@ -18,7 +18,7 @@ async function call(queueName, args, logger) {
   }
 
   // these are async anyways - gonna schedule them
-  logger.debug('Calling %s callback with args', queueName, args);
+  logger.debug('Calling %s callback with args %j', queueName, args);
   callback(...args);
 
   // clean local queue
@@ -89,7 +89,7 @@ exports.createConsumer = function createConsumer(redis, pubsubChannel, logger) {
       logger.info('Subscribed to channel %s', pubsubChannel);
     })
     .catch((err) => {
-      logger.fatal('Failed to subsctibe to pubsub channel:', err);
+      logger.fatal({ err }, 'Failed to subsctibe to pubsub channel');
       return Promise.delay(250).then(connect);
     });
 
@@ -108,7 +108,7 @@ exports.createConsumer = function createConsumer(redis, pubsubChannel, logger) {
 
     const [key, args] = message;
     if (!key || !isArray(args)) {
-      logger.warn('Malformed message passed: no key or args.', message);
+      logger.warn({ redisMsg: message }, 'Malformed message passed: no key or args');
       return;
     }
 

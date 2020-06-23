@@ -1,7 +1,7 @@
 const Promise = require('bluebird');
 const redislock = require('ioredis-lock');
 const Redis = require('ioredis');
-const bunyan = require('bunyan');
+const pino = require('pino');
 const assert = require('assert');
 
 // may only use redis with bluebird promise
@@ -40,9 +40,9 @@ const isTimeoutError = (e) => e === TimeoutError;
  *        @param {Number} timeout - defaults to 10000
  *        @param {Number} retries - defaults to 0
  *        @param {Number} delay - defaults to 100
- *    @param {Object|Boolean} log: sets up logger. If set to false supresses all warnings
- *        @param {String} name: name to use when reporting
- *        @param {String|Object} preset - either name of preset or streams obj for bunyan
+ *    @param {Pino|Boolean} [log] sets up logger. If set to false supresses all warnings
+ *    @param {String} [name] name to use when reporting
+ *    @param {Boolean} [debug=false] show additional diagnostic information
  *    @param {String} lockPrefix - used for creating locks in redis
  */
 class DistributedCallbackQueue {
@@ -82,31 +82,30 @@ class DistributedCallbackQueue {
     this.logger.info('Initialized...');
   }
 
+  static isCompatibleLogger(logger) {
+    for (const level of ['debug', 'info', 'warn', 'error', 'fatal'].values()) {
+      if (typeof logger[level] !== 'function') {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   static initLogger(options) {
     const { log: logger, debug, name } = options;
     const loggerEnabled = typeof logger === 'undefined' ? !!debug : logger;
 
-    if (loggerEnabled && logger instanceof bunyan) {
+    if (loggerEnabled && DistributedCallbackQueue.isCompatibleLogger(logger)) {
       return logger;
     }
 
-    const streams = [{
-      level: 'trace',
-      type: 'raw',
-      stream: new bunyan.RingBuffer({ limit: 100 }),
-    }];
-
+    let level = 'silent';
     if (loggerEnabled) {
-      streams.push({
-        stream: process.stdout,
-        level: debug ? 'debug' : 'info',
-      });
+      level = debug ? 'debug' : 'info';
     }
 
-    return bunyan.createLogger({
-      name: name || pkg.name,
-      streams,
-    });
+    return pino({ name: name || pkg.name, level }, pino.destination(1));
   }
 
   /**
@@ -415,7 +414,7 @@ class DistributedCallbackQueue {
         await lock.extend();
       } catch (error) {
         // because a job may take too much time, other listeners must implement timeout/retry strategy
-        this.logger.warn('failed to release lock and publish results', error);
+        this.logger.warn({ err: error }, 'failed to release lock and publish results');
         return null;
       }
 

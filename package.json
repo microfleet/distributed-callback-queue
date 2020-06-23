@@ -36,11 +36,11 @@
   },
   "dependencies": {
     "bluebird": "^3.7.1",
-    "bunyan": "^1.8.12",
     "callback-queue": "^3.0.0",
     "denque": "^1.4.1",
     "ioredis-lock": "^4.0.0",
     "lodash": "^4.17.15",
+    "pino": "^6.3.2",
     "serialize-error": "^7.0.1"
   },
   "devDependencies": {

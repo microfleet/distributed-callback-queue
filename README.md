@@ -96,11 +96,13 @@ function onJobCompleted(err, ...args) {
 
 ### Async/Await in-flight request caching
 
-#### Fanout(jobId: String, [timeout: Number], job: Function)
+#### Fanout(jobId: String, [timeout: Number], job: Function, [...args]: any[])
 
 Use `fanout(...)` method for the easiest way to handle job subscriptions where
 one actor must perform long-running job, but as soon as it's done - everyone who
 queued for the results of this job must be notified.
+
+`args` are optional args to be passed on to the job function. If you need to preserve context - use .bind
 
 Sample of code is provided to make use of this feature:
 

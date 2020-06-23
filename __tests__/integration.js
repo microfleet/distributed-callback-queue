@@ -206,6 +206,7 @@ describe('integration tests', () => {
 
   it('#fanout: multiple jobs are completed only once', () => {
     const args = ['completed'];
+    const arg1 = 'arg1';
     const job = sinon.spy(() => args);
     const onComplete = sinon.spy();
     const unexpectedError = sinon.spy();
@@ -218,7 +219,7 @@ describe('integration tests', () => {
       const id = String(idx % 3);
 
       try {
-        onComplete(id, await queueManager.dlock.fanout(id, job));
+        onComplete(id, await queueManager.dlock.fanout(id, job, arg1));
       } catch (e) {
         unexpectedError(e);
       }
@@ -226,6 +227,7 @@ describe('integration tests', () => {
       .delay(100)
       .then(() => {
         assert.equal(job.callCount, 3);
+        assert.equal(job.withArgs(arg1).callCount, 3);
         assert.equal(onComplete.withArgs('0', args).callCount, 4);
         assert.equal(onComplete.withArgs('1', args).callCount, 3);
         assert.equal(onComplete.withArgs('2', args).callCount, 3);
@@ -238,6 +240,7 @@ describe('integration tests', () => {
     const job = sinon.spy(async () => {
       await Promise.delay(3000);
     });
+    const arg1 = 'arg1';
     const onComplete = sinon.spy();
     const timeoutError = sinon.spy();
     const unexpectedError = sinon.spy();
@@ -246,7 +249,7 @@ describe('integration tests', () => {
       const id = String(idx % 3);
 
       try {
-        const result = await queueManager.dlock.fanout(id, 1500, job);
+        const result = await queueManager.dlock.fanout(id, 1500, job, arg1);
         onComplete(result);
       } catch (e) {
         if (e.message === 'queue-no-response') {
@@ -258,6 +261,7 @@ describe('integration tests', () => {
     });
 
     assert.equal(job.callCount, 3);
+    assert.equal(job.withArgs(arg1).callCount, 3);
     assert.equal(onComplete.callCount, 0);
     assert.equal(timeoutError.callCount, 10);
     assert.equal(timeoutError.withArgs(sinon.match({ message: 'queue-no-response' })).callCount, 10);

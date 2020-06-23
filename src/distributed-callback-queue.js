@@ -185,15 +185,33 @@ class DistributedCallbackQueue {
    * @param {String} suffix job key
    * @param {Number} [timeout] when job is considered to be failed and error is returned instead
    * @param {Function} worker async job to be performed by the party that gets the lock
+   * @param {Mixed[]} [args] passed on to worker as args
    *
    * @return {Function} job handler that must be invoked with a worker that returns a promise
    */
   async fanout(suffix, ...props) {
-    // verify we've got correct args in
-    assert(props.length >= 1 && props.length <= 2);
-    const worker = props.pop();
-    const timeout = props.pop();
+    const propsAmount = props.length;
+    assert(propsAmount >= 1, 'must have at least job function passed');
+
+    // eslint-disable-next-line prefer-const
+    let [timeout, worker, ...workerArgs] = props;
+
+    // in case of 1 arg
+    switch (propsAmount) {
+      case 1:
+        worker = timeout;
+        timeout = undefined;
+        break;
+      default:
+        if (typeof timeout === 'function') {
+          workerArgs.unshift(worker);
+          worker = timeout;
+          timeout = undefined;
+        }
+    }
+
     assert(typeof worker === 'function', 'ensure that you pass a function as a worker');
+    assert(typeof timeout === 'number' || typeof timeout === 'undefined', 'invalid timeout value');
 
     // allows us to reject-and-halt (eg. on timeout) even if the #push'ed lock has not yet been acquired
     let jobAbortReject;
@@ -244,7 +262,7 @@ class DistributedCallbackQueue {
     }
 
     // wrap so that we have concept of "cancelling" work
-    const performWork = worker();
+    const performWork = worker(...workerArgs);
 
     try {
       const result = await Promise.race([

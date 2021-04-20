@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2020",
+    "allowJs": true,
+    "declaration": true,
+    "alwaysStrict": false,
+    "sourceMap": true,
+    "strict": false,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "preserveConstEnums": true,
+    "composite": false,
+    "rootDir": "./src",
+    "outDir": "./lib"
+  },
+  "exclude": [
+    "**/node_modules/**",
+    "lib/**",
+    "packages/*/lib/**",
+    "dist",
+    "packages/*/dist/**",
+    "__tests__/**",
+    "coverage/**"
+  ]
+}

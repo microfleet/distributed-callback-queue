@@ -146,7 +146,7 @@ callbackQueue
 
     // do not forget to release lock after the job is done
     // do not care about result
-    return lock.release().reflect();
+    return lock.release()
   })
   .catch(err => {
     // lock could not be acquire

@@ -1,73 +1,73 @@
-const Deque = require('denque');
-const Promise = require('bluebird');
-const { LockAcquisitionError } = require('ioredis-lock');
+const Deque = require('denque')
+const Promise = require('bluebird')
+const { LockAcquisitionError } = require('@microfleet/ioredis-lock')
 
 class Semaphore {
   constructor(dlock, key) {
-    this.dlock = dlock;
-    this.key = key;
-    this.queue = new Deque();
-    this.current = null;
-    this.idle = true;
+    this.dlock = dlock
+    this.key = key
+    this.queue = new Deque()
+    this.current = null
+    this.idle = true
 
-    this.next = this.next.bind(this);
-    this.leave = this.leave.bind(this);
-    this._take = this._take.bind(this);
+    this.next = this.next.bind(this)
+    this.leave = this.leave.bind(this)
+    this._take = this._take.bind(this)
   }
 
   take(disposer = true) {
-    const promise = Promise.fromCallback(this._take);
+    const promise = Promise.fromCallback(this._take)
 
     // with disposer by default
     if (disposer === true) {
-      return promise.disposer(this.leave);
+      return promise.disposer(this.leave)
     }
 
-    return promise;
+    return promise
   }
 
   _take(next) {
     if (this.idle === false) {
-      this.queue.push(next);
-      return;
+      this.queue.push(next)
+      return
     }
 
-    this.idle = false;
+    this.idle = false
     this.dlock
       .push(this.key, this.next)
       .then((done) => {
-        this.current = done;
-        return next();
+        this.current = done
+        return next()
       })
       .catch(LockAcquisitionError, () => {
-        this.dlock.logger.debug('failed to acquire lock');
-        this._take(next);
+        this.dlock.logger.debug('failed to acquire lock')
+        this._take(next)
       })
       .catch((err) => {
-        this.dlock.logger.error({ err }, 'semaphore operational error');
+        this.dlock.logger.error({ err }, 'semaphore operational error')
         return Promise
           .delay(50)
           .return(next)
           .then(this._take)
-          .then(this.next);
-      });
+          .then(this.next)
+      })
   }
 
   next() {
-    this.idle = true;
+    this.idle = true
 
     if (this.queue.isEmpty()) {
-      return;
+      return
     }
 
-    this._take(this.queue.shift());
+    this._take(this.queue.shift())
   }
 
   leave() {
-    const done = this.current;
-    this.current = null;
-    done();
+    const done = this.current
+    this.current = null
+    done()
   }
 }
 
-module.exports = Semaphore;
+module.exports = Semaphore

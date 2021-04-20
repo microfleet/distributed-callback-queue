@@ -1,3 +1,6 @@
 {
-  "extends": "makeomatic"
+  "extends": "makeomatic/typescript",
+  "rules": {
+    "@typescript-eslint/no-var-requires": 0
+  }
 }

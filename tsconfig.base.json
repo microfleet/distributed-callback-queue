@@ -3,7 +3,7 @@
     "module": "commonjs",
     "moduleResolution": "node",
     "target": "ES2020",
-    "allowJs": true,
+    "allowJs": false,
     "declaration": true,
     "alwaysStrict": false,
     "sourceMap": true,
@@ -15,8 +15,6 @@
     "resolveJsonModule": true,
     "preserveConstEnums": true,
     "composite": false,
-    "rootDir": "./src",
-    "outDir": "./lib"
   },
   "exclude": [
     "**/node_modules/**",

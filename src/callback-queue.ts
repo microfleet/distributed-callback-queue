@@ -9,7 +9,7 @@ const queue = new Map<string, callbackQueue.Thunk>()
 const { isArray } = Array
 
 export type RedisInstance = Redis.Redis | Redis.Cluster
-export type Publisher = (key: string, err: Error | null, ...args: any[]) => Promise<void>
+export type Publisher = (key: string, err?: Error | null, ...args: any[]) => Promise<void>
 export type Consumer = (channel: string, message: string) => void
 
 /**
@@ -52,7 +52,7 @@ export function add(key: string, callback: callbackQueue.Thunk): boolean {
  * @param {Object} redis
  */
 export function createPublisher(redis: RedisInstance, pubsubChannel: string, logger: P.Logger): Publisher {
-  return async function publishResult(lockRedisKey: string, err: Error | null, ...args: any[]): Promise<void> {
+  return async function publishResult(lockRedisKey: string, err?: Error | null, ...args: any[]): Promise<void> {
     const broadcastArgs = [err ? serializeError(err) : null, ...args]
     const localArgs = [err, ...args];
 
@@ -92,7 +92,7 @@ function tryParsing(message: string, logger: P.Logger) {
  * @param {Object} redis
  */
 export function createConsumer(redis: RedisInstance, pubsubChannel: string, logger: P.Logger): Consumer {
-  const connect = async () => {
+  const connect = async (): Promise<void> => {
     try {
       await redis.subscribe(pubsubChannel)
       logger.info({ pubsubChannel }, 'Subscribed to channel')

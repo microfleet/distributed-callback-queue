@@ -3,7 +3,7 @@ const Redis = require('ioredis')
 const assert = require('assert')
 const sinon = require('sinon')
 const { noop } = require('lodash')
-const DLock = require('..')
+const { DistributedCallbackQueue, MultiLockError } = require('..')
 
 describe('integration tests', () => {
   jest.setTimeout(10000)
@@ -14,7 +14,7 @@ describe('integration tests', () => {
     return Promise
       .join(this.redis.connect(), this.pubsub.connect())
       .then(() => {
-        this.dlock = new DLock({
+        this.dlock = new DistributedCallbackQueue({
           logger: true,
           client: this.redis,
           pubsub: this.pubsub,
@@ -389,7 +389,7 @@ describe('integration tests', () => {
     return Promise.resolve(queueManager.dlock.once('1'))
       .tap(job)
       .tap(() => queueManager.dlock.multi('1', '2', '3'))
-      .catch(DLock.MultiLockError, failedToQueue)
+      .catch(MultiLockError, failedToQueue)
       .catch(unexpectedError)
       .then(() => {
         assert.equal(job.callCount, 1)
@@ -411,7 +411,7 @@ describe('integration tests', () => {
         await lock.release()
         job()
       } catch (err) {
-        if (err instanceof DLock.MultiLockError) {
+        if (err instanceof MultiLockError) {
           failedToQueue()
         } else {
           unexpectedError()

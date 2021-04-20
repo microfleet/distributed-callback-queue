@@ -1,57 +1,80 @@
-const Bluebird = require('bluebird')
-const redislock = require('@microfleet/ioredis-lock')
-const Redis = require('ioredis')
-const pino = require('pino')
-const assert = require('assert')
-const readPkg = require('read-pkg-up')
-
-// may only use redis with bluebird promise
-Redis.Promise = Bluebird
+import Bluebird = require('bluebird')
+import redislock = require('@microfleet/ioredis-lock')
+import Redis = require('ioredis')
+import pino = require('pino')
+import assert = require('assert')
+import readPkg = require('read-pkg-up')
 
 // lodash helpers
-const assign = require('lodash/assign')
-const defaults = require('lodash/defaults')
-const flatten = require('lodash/fp/flatten')
-const filter = require('lodash/fp/filter')
-const compose = require('lodash/fp/compose')
+import defaults = require('lodash/defaults')
+import flatten = require('lodash/fp/flatten')
+import filter = require('lodash/fp/filter')
+import compose = require('lodash/fp/compose')
 
 // internal deps
-const callbackQueue = require('./callback-queue')
-const { Semaphore } = require('./semaphore')
-const { MultiLock, MultiLockError } = require('./multi-lock')
+import * as callbackQueue from './callback-queue'
+import { Semaphore } from './semaphore'
+import { MultiLock, MultiLockError } from './multi-lock'
+import P = require('pino')
+import { Thunk } from '@microfleet/callback-queue'
+
 const pkg = readPkg.sync().packageJson
 
 const { LockAcquisitionError } = redislock
-const isBoolean = filter(Boolean)
+const isBoolean = filter<string>(Boolean)
 const toFlattenedTruthyArray = compose(isBoolean, flatten)
 const couldNotAcquireLockError = new LockAcquisitionError('job is already running')
 const TimeoutError = new Bluebird.TimeoutError('queue-no-response')
-const notLockAcquisitionError = (e) => e.name !== 'LockAcquisitionError'
-const isTimeoutError = (e) => e === TimeoutError
+const notLockAcquisitionError = (e: Error) => e.name !== 'LockAcquisitionError'
+const isTimeoutError = (e: unknown): e is typeof TimeoutError => e === TimeoutError
+
+export interface Config {
+  client: Redis.Redis | Redis.Cluster
+  pubsub: Redis.Redis | Redis.Cluster
+  pubsubChannel: string
+  lock: redislock.Config
+  log: P.Logger | boolean
+  lockPrefix: string
+  debug: boolean
+  name: string
+}
+
+export type Worker = {
+  (err?: Error | null, ...args: any[]): Promise<void>
+  lock: redislock.Lock | null
+}
 
 /**
  * @class DistributedCallbackQueue
  *
  * Init distributed callback queue
  * @param  {Object}   options:
- *    @param {redisClient} client: redis connection that will be used for communications
- *    @param {redisClient} pubsub: redis connection that will be used for notifications
- *    @param {String} pubsubChannel - will be used to pass notifications
- *    @param {Object} lock - configuration for redislock:
- *        @param {Number} timeout - defaults to 10000
- *        @param {Number} retries - defaults to 0
- *        @param {Number} delay - defaults to 100
- *    @param {Pino|Boolean} [log] sets up logger. If set to false supresses all warnings
+ *    @param client: redis connection that will be used for communications
+ *    @param pubsub: redis connection that will be used for notifications
+ *    @param pubsubChannel - will be used to pass notifications
+ *    @param lock - configuration for redislock:
+ *        @param timeout - defaults to 10000
+ *        @param retries - defaults to 0
+ *        @param delay - defaults to 100
+ *    @param [log] sets up logger. If set to false supresses all warnings
  *    @param {String} [name] name to use when reporting
  *    @param {Boolean} [debug=false] show additional diagnostic information
  *    @param {String} lockPrefix - used for creating locks in redis
  */
-class DistributedCallbackQueue {
-  constructor(options = {}) {
+export class DistributedCallbackQueue {
+  public readonly logger: P.Logger
+  private readonly lockPrefix: string
+  private readonly client: Config['client']
+  private readonly pubsub: Config['pubsub']
+  private readonly lockOptions: redislock.Config
+  private readonly publish: callbackQueue.Publisher
+  private readonly consume: callbackQueue.Consumer
+
+  constructor(options: Partial<Config> = {}) {
     const { client } = options
     assert.ok(client, 'options.client must be defined')
 
-    const pubsub = options.pubsub || (typeof client.duplicate === 'function' ? client.duplicate({ lazyConnect: false }) : client)
+    const pubsub = options.pubsub || client.duplicate()
     if (!(pubsub instanceof Redis.Cluster)) {
       assert.notStrictEqual(client, pubsub, 'options.client and options.pubsub must have separate redis clients')
     }
@@ -65,25 +88,21 @@ class DistributedCallbackQueue {
       delay: 100,
     })
 
-    const logger = this.logger = DistributedCallbackQueue.initLogger(options)
+    this.logger = DistributedCallbackQueue.initLogger(options)
+    this.client = client
+    this.pubsub = pubsub
+    this.lockOptions = lockOptions
+    this.lockPrefix = options.lockPrefix || pkg.name
+    this.publish = callbackQueue.createPublisher(client, pubsubChannel, this.logger)
+    this.consume = callbackQueue.createConsumer(pubsub, pubsubChannel, this.logger)
 
-    // put on the instance
-    assign(this, {
-      client,
-      pubsub,
-      lockOptions,
-      lockPrefix: options.lockPrefix || pkg.name,
-      publish: callbackQueue.createPublisher(client, pubsubChannel, logger),
-      consume: callbackQueue.createConsumer(pubsub, pubsubChannel, logger),
-    })
-
-    pubsub.on('messageBuffer', this.consume)
+    this.pubsub.on('messageBuffer', this.consume)
 
     // ready
     this.logger.info('Initialized...')
   }
 
-  static isCompatibleLogger(logger) {
+  static isCompatibleLogger(logger: unknown): logger is P.Logger {
     for (const level of ['debug', 'info', 'warn', 'error', 'fatal'].values()) {
       if (typeof logger[level] !== 'function') {
         return false
@@ -93,7 +112,7 @@ class DistributedCallbackQueue {
     return true
   }
 
-  static initLogger(options) {
+  static initLogger(options: Partial<Pick<Config, 'log' | 'debug' | 'name'>>): P.Logger {
     const { log: logger, debug, name } = options
     const loggerEnabled = typeof logger === 'undefined' ? !!debug : logger
 
@@ -111,9 +130,9 @@ class DistributedCallbackQueue {
 
   /**
    * Combines task key
-   * @param  {String} suffix
+   * @param suffix
    */
-  key(suffix) {
+  key(suffix: string): string {
     return `${this.lockPrefix}${suffix}`
   }
 
@@ -121,19 +140,19 @@ class DistributedCallbackQueue {
    * Creates lock instance
    * @return {Lock}
    */
-  getLock() {
+  getLock(): redislock.Lock {
     return redislock.createLock(this.client, this.lockOptions)
   }
 
   /**
    * Adds callback to distributed queue
-   * @param {String}  suffix - queue identifier
-   * @param {Function} next - callback to be called when request is finished
-   * @param {number} [timeout=this.lockOptions.timeout * 2] - fail after <timeout>, set to 0 to disable
-   * @returns {Promise} if promise is resolved then we must act, if it's rejected - then
+   * @param suffix - queue identifier
+   * @param next - callback to be called when request is finished
+   * @param [timeout=this.lockOptions.timeout * 2] - fail after <timeout>, set to 0 to disable
+   * @returns if promise is resolved then we must act, if it's rejected - then
    *                    somebody else is working on the same task right now
    */
-  async push(suffix, next, timeout = this.lockOptions.timeout * 2) {
+  async push(suffix: string, next: Thunk, timeout = this.lockOptions.timeout * 2): Promise<Worker> {
     assert(suffix, 'must be a truthy string')
 
     // first queue locally to make use of pending requests
@@ -166,7 +185,7 @@ class DistributedCallbackQueue {
     // get the lock
     try {
       await lock.acquire(lockRedisKey)
-      return await this.createWorker(lockRedisKey, lock)
+      return this.createWorker(lockRedisKey, lock)
     } catch (e) {
       if (notLockAcquisitionError(e)) {
         // this is an abnormal error, need to post it and cancel requests
@@ -182,14 +201,14 @@ class DistributedCallbackQueue {
    * Provides a helper over push method to be able to perform the same
    * work using promises with async/await style
    *
-   * @param {String} suffix job key
-   * @param {Number} [timeout] when job is considered to be failed and error is returned instead
-   * @param {Function} worker async job to be performed by the party that gets the lock
-   * @param {Mixed[]} [args] passed on to worker as args
+   * @param suffix job key
+   * @param [timeout] when job is considered to be failed and error is returned instead
+   * @param worker async job to be performed by the party that gets the lock
+   * @param [args] passed on to worker as args
    *
-   * @return {Function} job handler that must be invoked with a worker that returns a promise
+   * @return job handler that must be invoked with a worker that returns a promise
    */
-  async fanout(suffix, ...props) {
+  async fanout(suffix: string, ...props: any[]): Promise<any> {
     const propsAmount = props.length
     assert(propsAmount >= 1, 'must have at least job function passed')
 
@@ -215,7 +234,7 @@ class DistributedCallbackQueue {
 
     // allows us to reject-and-halt (eg. on timeout) even if the #push'ed lock has not yet been acquired
     let jobAbortReject
-    let jobAbortPromise = new Bluebird((resolve, reject) => {
+    let jobAbortPromise = new Bluebird((_, reject) => {
       jobAbortReject = reject
     })
 
@@ -287,7 +306,7 @@ class DistributedCallbackQueue {
     return jobCompletedPromise
   }
 
-  semaphore(bucket) {
+  semaphore(bucket: string): Semaphore {
     return new Semaphore(this, bucket)
   }
 
@@ -300,7 +319,7 @@ class DistributedCallbackQueue {
    *                    Promise contains lock, which must be released after the job is completed
    *                    Call `lock.release()` or `lock.extend` based on what's needed
    */
-  async once(suffix) {
+  async once(suffix: string): Promise<redislock.Lock> {
     assert(suffix, 'must be a truthy string')
 
     const lockRedisKey = this.key(suffix)
@@ -314,7 +333,7 @@ class DistributedCallbackQueue {
    * @param  {String[]} args - array of locks to acquire
    * @return {MultiLock}
    */
-  async multi(...args) {
+  async multi(...args: any[]): Promise<MultiLock> {
     const actions = toFlattenedTruthyArray(args)
     assert(actions.length, 'at least 1 action must be supplied')
 
@@ -332,71 +351,19 @@ class DistributedCallbackQueue {
   }
 
   /**
-   * Creates real queue, which performs operations in the order they were added to it
-   * @param  {string} lockKey - Identifier, based on which we create the lock.
-   * @param  {Function(completed)} jobFunction - Accepts one arg, which is a fn, which must be called when work is done.
-   * @returns {Promise<*>}
-   */
-  serial(lockKey, jobFunction) {
-    const workUnit = (next) => {
-      let called = 0
-      let rejected = false
-
-      const done = (err) => {
-        // in case there are some remnants of this
-        if (rejected === true) return null
-
-        // increase counter for further queueing
-        called += 1
-
-        // error handling
-        if (err) {
-          // if we failed to acquire lock - do a noop
-          // and record failure of lock acquisition
-          if (err instanceof LockAcquisitionError) {
-            rejected = true
-            return null
-          }
-
-          // if it's not an acquisition error - then it's operational
-          // and we must end early with an error
-          return next(err)
-        }
-
-        // in-case that is not an error and call counter is 1 - simply return
-        // we must wait for the second call
-        if (called === 1) return null
-
-        // if we were not rejected - return control
-        if (rejected === false) return next()
-
-        // try requeueing and basically repeating operation until it succeeds
-        return Bluebird.fromCallback(workUnit).asCallback(next)
-      }
-
-      return this
-        .push(lockKey, done)
-        .then(jobFunction)
-        .asCallback(done)
-    }
-
-    return Bluebird.fromCallback(workUnit)
-  }
-
-  /**
    * Returns function that should be called with the result of the work
-   * @param {String} lockRedisKey - key used for locking
-   * @param {Object} acquiredLock - acquired lock
-   * @returns {Function} worker - call with arguments that need to be passed to
-   *                              all queued callbacks
+   * @param lockRedisKey - key used for locking
+   * @param acquiredLock - acquired lock
+   * @returns worker - call with arguments that need to be passed to
+   *    all queued callbacks
    */
-  createWorker(lockRedisKey, acquiredLock) {
+  createWorker(lockRedisKey: string, acquiredLock: redislock.Lock): Worker {
     /**
      * This function must be called when job has been completed
      * @param  {Error} err
      * @param  {Array} ...args
      */
-    const broadcastJobStatus = async (err, ...args) => {
+    const broadcastJobStatus: Worker = async (err?: Error | null, ...args: any[]): Promise<void> => {
       /* clen ref */
       const { lock } = broadcastJobStatus
 
@@ -446,20 +413,4 @@ class DistributedCallbackQueue {
   }
 }
 
-/**
- * Constructor for distributed callback queue
- * @type {DistributedCallbackQueue}
- */
-module.exports = exports = DistributedCallbackQueue
-
-/**
- * Expose custom error type for MultiLock
- * @type {MultiLockError}
- */
-exports.MultiLockError = MultiLockError
-
-/**
- * Exposes MultiLock class
- * @type {MultiLock}
- */
-exports.MultiLock = MultiLock
+export { MultiLockError, MultiLock }

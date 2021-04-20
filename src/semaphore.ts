@@ -1,7 +1,7 @@
 import Deque = require('denque')
 import Bluebird = require('bluebird')
 import { LockAcquisitionError } from '@microfleet/ioredis-lock'
-import DistributedCallbackQueue = require('./distributed-callback-queue')
+import type { DistributedCallbackQueue } from './distributed-callback-queue'
 
 export type Resolver<T = any> = (err?: any, result?: T) => void
 
@@ -10,7 +10,7 @@ export class Semaphore {
   private current: Resolver | null = null
   private idle = true
 
-  constructor(private dlock: typeof DistributedCallbackQueue, public key: string) {
+  constructor(private dlock: DistributedCallbackQueue, public key: string) {
     this.dlock = dlock
     this.key = key
 
@@ -64,7 +64,8 @@ export class Semaphore {
       return
     }
 
-    return this._take(this.queue.shift())
+    // we've verified this with .isEmpty()
+    return this._take(this.queue.shift() as Resolver)
   }
 
   public leave(): void {

@@ -18,8 +18,6 @@ import { MultiLock, MultiLockError } from './multi-lock'
 import P = require('pino')
 import { Thunk } from '@microfleet/callback-queue'
 
-const pkg = readPkg.sync().packageJson
-
 const { LockAcquisitionError } = redislock
 const isBoolean = filter<string>(Boolean)
 const toFlattenedTruthyArray = compose(isBoolean, flatten)
@@ -27,6 +25,7 @@ const couldNotAcquireLockError = new LockAcquisitionError('job is already runnin
 const TimeoutError = new Bluebird.TimeoutError('queue-no-response')
 const notLockAcquisitionError = (e: Error) => e.name !== 'LockAcquisitionError'
 const isTimeoutError = (e: unknown): e is typeof TimeoutError => e === TimeoutError
+const pkg = readPkg.sync()?.packageJson
 
 export interface Config {
   client: Redis.Redis | Redis.Cluster
@@ -40,8 +39,13 @@ export interface Config {
 }
 
 export type Worker = {
-  (err?: Error | null, ...args: any[]): Promise<void>
+  (err?: Error | null, ...args: any[]): Promise<void | null>
   lock: redislock.Lock | null
+}
+
+// eslint-disable-next-line @typescript-eslint/ban-types
+function hasProp<K extends PropertyKey>(data: object, prop: K): data is Record<K, unknown> {
+  return prop in data
 }
 
 /**
@@ -82,6 +86,8 @@ export class DistributedCallbackQueue {
     const { pubsubChannel } = options
     assert.ok(pubsubChannel, 'pubsubChannel must be specified')
 
+    assert(pkg, 'must be able to find package.json')
+
     const lockOptions = defaults(options.lock || {}, {
       timeout: 10000,
       retries: 2,
@@ -103,8 +109,12 @@ export class DistributedCallbackQueue {
   }
 
   static isCompatibleLogger(logger: unknown): logger is P.Logger {
+    if (typeof logger !== 'object' || logger == null) {
+      return false
+    }
+
     for (const level of ['debug', 'info', 'warn', 'error', 'fatal'].values()) {
-      if (typeof logger[level] !== 'function') {
+      if (!hasProp(logger, level) || typeof logger[level] !== 'function') {
         return false
       }
     }
@@ -124,6 +134,8 @@ export class DistributedCallbackQueue {
     if (loggerEnabled) {
       level = debug ? 'debug' : 'info'
     }
+
+    assert(pkg, 'package.json couldnt be found')
 
     return pino({ name: name || pkg.name, level }, pino.destination(1))
   }
@@ -233,16 +245,16 @@ export class DistributedCallbackQueue {
     assert(typeof timeout === 'number' || typeof timeout === 'undefined', 'invalid timeout value')
 
     // allows us to reject-and-halt (eg. on timeout) even if the #push'ed lock has not yet been acquired
-    let jobAbortReject
-    let jobAbortPromise = new Bluebird((_, reject) => {
+    let jobAbortReject: undefined | ((err?: Error | null) => void)
+    let jobAbortPromise: Promise<any> | undefined = new Bluebird((_, reject) => {
       jobAbortReject = reject
     })
 
-    let onJobCompleted
+    let onJobCompleted: (err?: Error | null, args?: any) => void
     const jobCompletedPromise = new Bluebird((resolve, reject) => {
-      onJobCompleted = (err, ...args) => {
+      onJobCompleted = (err, args) => {
         if (err) {
-          if (jobAbortPromise) {
+          if (jobAbortPromise && jobAbortReject) {
             // ensure that jobAbortPromise rejects *first* so that we can return jobCompletedPromise *before* it rejects
             jobAbortReject(err)
             setImmediate(reject, err)
@@ -253,13 +265,14 @@ export class DistributedCallbackQueue {
           return
         }
 
-        resolve(...args)
+        resolve(args)
       }
     })
 
     let onCompleted
     try {
-      const pushPromise = this.push(suffix, onJobCompleted, timeout)
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const pushPromise = this.push(suffix, onJobCompleted!, timeout)
       onCompleted = await Bluebird.race([
         pushPromise,
         jobAbortPromise,
@@ -273,7 +286,8 @@ export class DistributedCallbackQueue {
       jobAbortPromise = undefined
 
       if (notLockAcquisitionError(err)) {
-        setImmediate(onJobCompleted, err)
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        setImmediate(onJobCompleted!, err)
         return jobCompletedPromise
       }
 
@@ -363,7 +377,7 @@ export class DistributedCallbackQueue {
      * @param  {Error} err
      * @param  {Array} ...args
      */
-    const broadcastJobStatus: Worker = async (err?: Error | null, ...args: any[]): Promise<void> => {
+    const broadcastJobStatus: Worker = async (err?: Error | null, ...args: any[]): Promise<void | null> => {
       /* clen ref */
       const { lock } = broadcastJobStatus
 

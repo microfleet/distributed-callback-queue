@@ -22,7 +22,6 @@
     "packages/*/lib/**",
     "dist",
     "packages/*/dist/**",
-    "__tests__/**",
     "coverage/**"
   ]
 }

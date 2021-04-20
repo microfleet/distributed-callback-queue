@@ -1,44 +1,59 @@
-const Promise = require('bluebird')
-const Redis = require('ioredis')
-const assert = require('assert')
-const sinon = require('sinon')
-const { noop } = require('lodash')
-const { DistributedCallbackQueue, MultiLockError } = require('..')
+import Promise = require('bluebird')
+import Redis = require('ioredis')
+import assert = require('assert')
+import sinon = require('sinon')
+import { noop } from 'lodash'
+import { DistributedCallbackQueue, MultiLockError, Semaphore } from '../src/distributed-callback-queue'
+import { LockAcquisitionError } from '@microfleet/ioredis-lock'
 
 describe('integration tests', () => {
   jest.setTimeout(10000)
 
-  function QueueManager() {
-    this.redis = new Redis({ sentinels: [{ host: 'redis-sentinel', port: 26379 }], name: 'mservice', lazyConnect: true })
-    this.pubsub = this.redis.duplicate()
-    return Promise
-      .join(this.redis.connect(), this.pubsub.connect())
-      .then(() => {
-        this.dlock = new DistributedCallbackQueue({
-          logger: true,
-          client: this.redis,
-          pubsub: this.pubsub,
-          pubsubChannel: 'dlock',
-          lock: {
-            timeout: 2000,
-          },
-        })
-        return null
+  let queueManagers: QueueManager[]
+
+  class QueueManager {
+    public readonly redis: Redis.Redis
+    public readonly pubsub: Redis.Redis
+    private _dlock: DistributedCallbackQueue | null = null
+
+    constructor() {
+      this.redis = new Redis({ sentinels: [{ host: 'redis-sentinel', port: 26379 }], name: 'mservice', lazyConnect: true })
+      this.pubsub = this.redis.duplicate()
+    }
+
+    get dlock(): DistributedCallbackQueue {
+      assert(this._dlock)
+      return this._dlock
+    }
+
+    async ready() {
+      await Promise.all([
+        this.redis.connect(),
+        this.pubsub.connect()
+      ])
+
+      this._dlock = new DistributedCallbackQueue({
+        log: true,
+        client: this.redis,
+        pubsub: this.pubsub,
+        pubsubChannel: 'dlock',
+        lock: {
+          timeout: 2000,
+        },
       })
-      .return(this)
+    }
   }
 
-  function isLockAcquisitionError(e) {
+  function isLockAcquisitionError(e: Error): e is LockAcquisitionError {
     return e.name === 'LockAcquisitionError'
   }
 
-  beforeEach(() => {
-    return Promise
-      .map(new Array(10), () => new QueueManager())
-      .then((queueManagers) => {
-        this.queueManagers = queueManagers
-        return null
-      })
+  beforeEach(async () => {
+    queueManagers = await Promise.map(new Array(10), async () => {
+      const manager = new QueueManager()
+      await manager.ready()
+      return manager
+    })
   })
 
   it('#push: job is performed only once', () => {
@@ -48,7 +63,7 @@ describe('integration tests', () => {
     const failedToQueue = sinon.spy()
     const unexpectedError = sinon.spy()
 
-    return Promise.map(this.queueManagers, async (queueManager) => {
+    return Promise.map(queueManagers, async (queueManager) => {
       try {
         await queueManager.dlock
           .push('1', (...data) => onComplete(...data))
@@ -79,7 +94,7 @@ describe('integration tests', () => {
     const failedToQueue = sinon.spy()
     const unexpectedError = sinon.spy()
 
-    return Promise.map(this.queueManagers, async (queueManager, idx) => {
+    return Promise.map(queueManagers, async (queueManager, idx) => {
       // 0 1 2
       // 0 1 2
       // 0 1 2
@@ -116,7 +131,7 @@ describe('integration tests', () => {
     const failedToQueue = sinon.spy()
     const unexpectedError = sinon.spy()
 
-    return Promise.map(this.queueManagers, async (queueManager, idx) => {
+    return Promise.map(queueManagers, async (queueManager, idx) => {
       const id = String(idx % 3)
       try {
         await queueManager.dlock
@@ -148,7 +163,7 @@ describe('integration tests', () => {
     const failedToQueue = sinon.spy()
     const unexpectedError = sinon.spy()
 
-    return Promise.map(this.queueManagers, async (queueManager) => {
+    return Promise.map(queueManagers, async (queueManager) => {
       try {
         await queueManager.dlock
           .push('error', (...data) => onComplete(...data))
@@ -187,7 +202,7 @@ describe('integration tests', () => {
     const onComplete = sinon.spy()
     const unexpectedError = sinon.spy()
 
-    return Promise.map(this.queueManagers, async (queueManager) => {
+    return Promise.map(queueManagers, async (queueManager) => {
       try {
         onComplete(await queueManager.dlock.fanout('1', job))
       } catch (e) {
@@ -207,11 +222,11 @@ describe('integration tests', () => {
   it('#fanout: multiple jobs are completed only once', () => {
     const args = ['completed']
     const arg1 = 'arg1'
-    const job = sinon.spy(() => args)
+    const job = sinon.spy((_: any) => args)
     const onComplete = sinon.spy()
     const unexpectedError = sinon.spy()
 
-    return Promise.map(this.queueManagers, async (queueManager, idx) => {
+    return Promise.map(queueManagers, async (queueManager, idx) => {
       // 0 1 2
       // 0 1 2
       // 0 1 2
@@ -237,7 +252,7 @@ describe('integration tests', () => {
   })
 
   it('#fanout: fails after timeout', async () => {
-    const job = sinon.spy(async () => {
+    const job = sinon.spy(async (_: any) => {
       await Promise.delay(3000)
     })
     const arg1 = 'arg1'
@@ -245,7 +260,7 @@ describe('integration tests', () => {
     const timeoutError = sinon.spy()
     const unexpectedError = sinon.spy()
 
-    await Promise.map(this.queueManagers, async (queueManager, idx) => {
+    await Promise.map(queueManagers, async (queueManager, idx) => {
       const id = String(idx % 3)
 
       try {
@@ -277,11 +292,12 @@ describe('integration tests', () => {
     const unexpectedError = sinon.spy()
     const unacquirableLock = new Promise(noop)
 
-    await Promise.map(this.queueManagers, async (queueManager, idx) => {
+    await Promise.map(queueManagers, async (queueManager, idx) => {
       const id = String(idx % 3)
 
+      // @ts-expect-error testing
       sinon.stub(queueManager.dlock, 'getLock').returns({
-        acquire: () => unacquirableLock,
+        acquire() { return unacquirableLock },
       })
 
       try {
@@ -311,7 +327,7 @@ describe('integration tests', () => {
     const onComplete = sinon.spy()
     const unexpectedError = sinon.spy()
 
-    return Promise.map(this.queueManagers, async (queueManager) => {
+    return Promise.map(queueManagers, async (queueManager) => {
       try {
         const results = await queueManager.dlock.fanout('error', job)
         onComplete(null, results)
@@ -344,7 +360,7 @@ describe('integration tests', () => {
     const failedToQueue = sinon.spy()
     const unexpectedError = sinon.spy()
 
-    return Promise.map(this.queueManagers, (queueManager) => {
+    return Promise.map(queueManagers, (queueManager) => {
       return Promise.resolve(queueManager.dlock.once('once'))
         .then((lock) => {
           return Promise.delay(1000)
@@ -368,7 +384,7 @@ describe('integration tests', () => {
 
   it('#multi - able to acquire lock, extend it and release it', async () => {
     const job = sinon.spy()
-    const [queueManager] = this.queueManagers
+    const [queueManager] = queueManagers
 
     const lock = await queueManager.dlock.multi('1', '2')
     job()
@@ -384,7 +400,7 @@ describe('integration tests', () => {
     const job = sinon.spy()
     const failedToQueue = sinon.spy()
     const unexpectedError = sinon.spy()
-    const queueManager = this.queueManagers[0]
+    const queueManager = queueManagers[0]
 
     return Promise.resolve(queueManager.dlock.once('1'))
       .tap(job)
@@ -404,7 +420,7 @@ describe('integration tests', () => {
     const failedToQueue = sinon.spy()
     const unexpectedError = sinon.spy()
 
-    await Promise.map(this.queueManagers, async (queueManager) => {
+    await Promise.map(queueManagers, async (queueManager) => {
       try {
         const lock = await queueManager.dlock.multi('1', '2', '3')
         await Promise.delay(1000)
@@ -425,51 +441,30 @@ describe('integration tests', () => {
   })
 
   describe('#semaphore', () => {
+    let counter = 0
+    let semaphores: Semaphore[]
+
     beforeEach(() => {
-      this.counter = 0
-      this.semaphores = this.queueManagers.map((manager) => (
+      counter = 0
+      semaphores = queueManagers.map((manager) => (
         manager.dlock.semaphore('test-semaphore')
       ))
     })
 
-    it('ensure each operation is processed serially', () => (
-      Promise
-        .map(Array(50), (_, i) => {
-          const semaphore = this.semaphores[i % this.semaphores.length]
-          return Promise.using(semaphore.take(), async () => {
-            this.counter += 1
-            // if it's possible for other contestants
-            // to run out of semaphore lock - this.counter will
-            // increase multiple times before resolving following promise
-            await Promise.delay(10)
-
-            // return the counter
-            return this.counter - 1
-          })
-        })
-        .then((args) => {
-          assert.equal(args.length, 50)
-          args.sort((a, b) => a - b).forEach((arg, i) => {
-            assert.equal(arg, i)
-          })
-          return null
-        })
-    ))
-
     it('ensure each operation is processed serially, no disposer', () => (
       Promise
         .map(Array(50), async (_, i) => {
-          const semaphore = this.semaphores[i % this.semaphores.length]
+          const semaphore = semaphores[i % semaphores.length]
           try {
-            await semaphore.take(false)
-            this.counter += 1
+            await semaphore.take()
+            counter += 1
             // if it's possible for other contestants
-            // to run out of semaphore lock - this.counter will
+            // to run out of semaphore lock - counter will
             // increase multiple times before resolving following promise
             await Promise.delay(10)
 
             // return the counter
-            return this.counter - 1
+            return counter - 1
           } finally {
             semaphore.leave()
           }
@@ -482,19 +477,13 @@ describe('integration tests', () => {
           return null
         })
     ))
-
-    afterEach(() => {
-      this.semaphores = null
-    })
   })
 
   afterEach(async () => {
-    await this.queueManagers[0].redis.flushdb()
-    return Promise.map(this.queueManagers, (queueManager) => {
-      return Promise.join(
-        queueManager.redis.quit(),
-        queueManager.pubsub.quit()
-      )
-    })
+    await queueManagers[0].redis.flushdb()
+    return Promise.map(queueManagers, (queueManager) => Promise.all([
+      queueManager.redis.quit(),
+      queueManager.pubsub.quit()
+    ]))
   })
 })

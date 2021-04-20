@@ -31,7 +31,7 @@ export interface Config {
   client: Redis.Redis | Redis.Cluster
   pubsub: Redis.Redis | Redis.Cluster
   pubsubChannel: string
-  lock: redislock.Config
+  lock: Partial<redislock.Config>
   log: P.Logger | boolean
   lockPrefix: string
   debug: boolean
@@ -52,7 +52,7 @@ function hasProp<K extends PropertyKey>(data: object, prop: K): data is Record<K
  * @class DistributedCallbackQueue
  *
  * Init distributed callback queue
- * @param  {Object}   options:
+ * @param options:
  *    @param client: redis connection that will be used for communications
  *    @param pubsub: redis connection that will be used for notifications
  *    @param pubsubChannel - will be used to pass notifications
@@ -61,9 +61,9 @@ function hasProp<K extends PropertyKey>(data: object, prop: K): data is Record<K
  *        @param retries - defaults to 0
  *        @param delay - defaults to 100
  *    @param [log] sets up logger. If set to false supresses all warnings
- *    @param {String} [name] name to use when reporting
- *    @param {Boolean} [debug=false] show additional diagnostic information
- *    @param {String} lockPrefix - used for creating locks in redis
+ *    @param [name] name to use when reporting
+ *    @param [debug=false] show additional diagnostic information
+ *    @param lockPrefix - used for creating locks in redis
  */
 export class DistributedCallbackQueue {
   public readonly logger: P.Logger
@@ -427,4 +427,4 @@ export class DistributedCallbackQueue {
   }
 }
 
-export { MultiLockError, MultiLock }
+export { MultiLockError, MultiLock, Semaphore }

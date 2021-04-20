@@ -19,17 +19,8 @@ export class Semaphore {
     this._take = this._take.bind(this)
   }
 
-  public take<T>(disposer: false): Bluebird<T>
-  public take<T>(disposer: true): Bluebird.Disposer<T>
-  public take<T>(disposer = true): Bluebird<T> | Bluebird.Disposer<T> {
-    const promise = Bluebird.fromCallback<T>(this._take)
-
-    // with disposer by default
-    if (disposer === true) {
-      return promise.disposer(this.leave)
-    }
-
-    return promise
+  public async take<T>(): Promise<T> {
+    return Bluebird.fromCallback<T>(this._take)
   }
 
   private async _take<T>(next: Resolver<T>) {
@@ -68,7 +59,8 @@ export class Semaphore {
     return this._take(this.queue.shift() as Resolver)
   }
 
-  public leave(): void {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  public leave(..._args: any[]): void {
     const done = this.current
     this.current = null
     if (done) done()

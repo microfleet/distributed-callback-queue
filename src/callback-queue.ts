@@ -1,17 +1,24 @@
-const Promise = require('bluebird')
-const callbackQueue = require('@microfleet/callback-queue')
-const { serializeError, deserializeError } = require('serialize-error')
+import P from 'pino'
+import { delay } from 'bluebird'
+import * as callbackQueue from '@microfleet/callback-queue'
+import { serializeError, deserializeError } from 'serialize-error'
+import Redis = require('ioredis')
 
 // callback buckets
-const queue = new Map()
+const queue = new Map<string, callbackQueue.Thunk>()
 const { isArray } = Array
+
+export type RedisInstance = Redis.Redis | Redis.Cluster
+export type Publisher = (key: string, err: Error | null, ...args: any[]) => Promise<void>
+export type Consumer = (channel: string, message: string) => void
 
 /**
  * Call functions stored in local queues
- * @param  {String} queueName
- * @param  {Array} args
+ * @param queueName
+ * @param args
+ * @param logger
  */
-async function call(queueName, args, logger) {
+function call(queueName: string, args: any[], logger: P.Logger): void {
   const callback = queue.get(queueName)
   if (!callback) {
     throw new Error('callback called multiple times')
@@ -30,7 +37,7 @@ async function call(queueName, args, logger) {
  * @param {String} key - queue key
  * @param {Function} callback - function to add
  */
-exports.add = function add(key, callback) {
+export function add(key: string, callback: callbackQueue.Thunk): boolean {
   const aggregator = callbackQueue.add(key, callback)
   if (!aggregator) {
     return false
@@ -44,24 +51,26 @@ exports.add = function add(key, callback) {
  * Creates publish function that is used later on to process callbacks
  * @param {Object} redis
  */
-exports.createPublisher = function createPublisher(redis, pubsubChannel, logger) {
-  return async function publishResult(lockRedisKey, err, ...args) {
+export function createPublisher(redis: RedisInstance, pubsubChannel: string, logger: P.Logger): Publisher {
+  return async function publishResult(lockRedisKey: string, err: Error | null, ...args: any[]): Promise<void> {
     const broadcastArgs = [err ? serializeError(err) : null, ...args]
-    const localArgs = [err, ...args]
+    const localArgs = [err, ...args];
 
     // post result to other processes
-    redis
-      .publish(pubsubChannel, JSON.stringify([lockRedisKey, broadcastArgs]))
-      .catch((e) => {
-        logger.warn({ err: e }, 'failed to publish results')
-      })
+    (async () => {
+      try {
+        await redis.publish(pubsubChannel, JSON.stringify([lockRedisKey, broadcastArgs]))
+      } catch (err) {
+        logger.warn({ err }, 'failed to publish results')
+      }
+    })()
 
     // call local queue for faster processing
     // we don't care here if it fails, it could've been already processed
     try {
-      await call(lockRedisKey, localArgs, logger)
-    } catch (e) {
-      logger.warn({ err: e, lockRedisKey }, 'failed to perform call')
+      call(lockRedisKey, localArgs, logger)
+    } catch (err) {
+      logger.warn({ err, lockRedisKey }, 'failed to perform call')
     }
   }
 }
@@ -69,11 +78,11 @@ exports.createPublisher = function createPublisher(redis, pubsubChannel, logger)
 /**
  * Helper function to parse possible JSON from the Buffer
  */
-function tryParsing(message, logger) {
+function tryParsing(message: string, logger: P.Logger) {
   try {
     return JSON.parse(message)
-  } catch (e) {
-    logger.warn({ message }, 'Cant parse message')
+  } catch (err) {
+    logger.warn({ originalMessage: message, err }, 'Cant parse message')
     return null
   }
 }
@@ -82,16 +91,17 @@ function tryParsing(message, logger) {
  * Creates publish function that is used later on to process callbacks
  * @param {Object} redis
  */
-exports.createConsumer = function createConsumer(redis, pubsubChannel, logger) {
-  const connect = () => redis
-    .subscribe(pubsubChannel)
-    .tap(() => {
-      logger.info('Subscribed to channel %s', pubsubChannel)
-    })
-    .catch((err) => {
-      logger.fatal({ err }, 'Failed to subsctibe to pubsub channel')
-      return Promise.delay(250).then(connect)
-    })
+export function createConsumer(redis: RedisInstance, pubsubChannel: string, logger: P.Logger): Consumer {
+  const connect = async () => {
+    try {
+      await redis.subscribe(pubsubChannel)
+      logger.info({ pubsubChannel }, 'Subscribed to channel')
+    } catch (err) {
+      logger.error({ err }, 'Failed to subsctibe to pubsub channel')
+      await delay(250)
+      return connect()
+    }
+  }
 
   // init connection
   connect()
@@ -115,8 +125,11 @@ exports.createConsumer = function createConsumer(redis, pubsubChannel, logger) {
     // no listeners here
     // eat the error
     try {
-      if (args[0]) args[0] = deserializeError(args[0])
-      await call(key, args, logger)
+      if (args[0]) {
+        args[0] = deserializeError(args[0])
+      }
+
+      call(key, args, logger)
     } catch (err) {
       logger.warn({ err }, 'call failed')
     }
@@ -130,6 +143,5 @@ exports.createConsumer = function createConsumer(redis, pubsubChannel, logger) {
 /**
  * Reference to original call function,
  * used for testing
- * @type {Function}
  */
-exports._call = call
+export const _call = call

@@ -366,28 +366,18 @@ describe('integration tests', () => {
       })
   })
 
-  it('#multi - able to acquire lock, extend it and release it', () => {
+  it('#multi - able to acquire lock, extend it and release it', async () => {
     const job = sinon.spy()
-    const failedToQueue = sinon.spy()
-    const unexpectedError = sinon.spy()
     const [queueManager] = this.queueManagers
 
-    return queueManager
-      .dlock
-      .multi('1', '2')
-      .tap(job)
-      .tap((lock) => lock.extend(10000))
-      .tap(job)
-      .tap((lock) => lock.release())
-      .tap(job)
-      .tapCatch(DLock.MultiLockError, failedToQueue)
-      .tapCatch(unexpectedError)
-      .then(() => {
-        assert.equal(job.callCount, 3)
-        assert.ok(!failedToQueue.called, 'unexpected error was raised')
-        assert.ok(!unexpectedError.called, 'fatal error was raised')
-        return null
-      })
+    const lock = await queueManager.dlock.multi('1', '2')
+    job()
+    await lock.extend(10000)
+    job()
+    await lock.release()
+    job()
+
+    assert.strictEqual(job.callCount, 3)
   })
 
   it('#multi - rejects when it can not acquire multiple locks', () => {
@@ -409,30 +399,29 @@ describe('integration tests', () => {
       })
   })
 
-  it('#multi - acquires one of locks concurrently', () => {
+  it('#multi - acquires one of locks concurrently', async () => {
     const job = sinon.spy()
     const failedToQueue = sinon.spy()
     const unexpectedError = sinon.spy()
 
-    return Promise
-      .map(this.queueManagers, (queueManager) => {
-        return queueManager.dlock
-          .multi('1', '2', '3')
-          .then((lock) => (
-            Promise
-              .delay(1000)
-              .then(() => lock.release())
-              .then(job)
-          ))
-          .catch(DLock.MultiLockError, failedToQueue)
-          .catch(unexpectedError)
-      })
-      .then(() => {
-        assert(job.calledOnce, 'job was called more than once')
-        assert.equal(failedToQueue.callCount, 9, 'unexpected error was raised')
-        assert.equal(unexpectedError.called, false, 'fatal error was raised')
-        return null
-      })
+    await Promise.map(this.queueManagers, async (queueManager) => {
+      try {
+        const lock = await queueManager.dlock.multi('1', '2', '3')
+        await Promise.delay(1000)
+        await lock.release()
+        job()
+      } catch (err) {
+        if (err instanceof DLock.MultiLockError) {
+          failedToQueue()
+        } else {
+          unexpectedError()
+        }
+      }
+    })
+
+    assert(job.calledOnce, 'job was called more than once')
+    assert.strictEqual(failedToQueue.callCount, 9, 'unexpected error was raised')
+    assert.strictEqual(unexpectedError.called, false, 'fatal error was raised')
   })
 
   describe('#semaphore', () => {

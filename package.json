@@ -36,13 +36,13 @@
   },
   "dependencies": {
     "@microfleet/callback-queue": "^4.0.2",
-    "@microfleet/ioredis-lock": "^5.0.0",
+    "@microfleet/ioredis-lock": "^5.0.4",
     "bluebird": "^3.7.1",
     "denque": "^1.5.0",
     "lodash": "^4.17.21",
-    "pino": "^6.11.2",
+    "pino": "^6.11.3",
     "read-pkg-up": "7",
-    "serialize-error": "^8.0.1"
+    "serialize-error": "^8.1.0"
   },
   "devDependencies": {
     "@makeomatic/deploy": "^10.4.0",

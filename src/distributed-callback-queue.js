@@ -1,4 +1,4 @@
-const Promise = require('bluebird')
+const Bluebird = require('bluebird')
 const redislock = require('@microfleet/ioredis-lock')
 const Redis = require('ioredis')
 const pino = require('pino')
@@ -6,7 +6,7 @@ const assert = require('assert')
 const readPkg = require('read-pkg-up')
 
 // may only use redis with bluebird promise
-Redis.Promise = Promise
+Redis.Promise = Bluebird
 
 // lodash helpers
 const assign = require('lodash/assign')
@@ -25,7 +25,7 @@ const { LockAcquisitionError } = redislock
 const isBoolean = filter(Boolean)
 const toFlattenedTruthyArray = compose(isBoolean, flatten)
 const couldNotAcquireLockError = new LockAcquisitionError('job is already running')
-const TimeoutError = new Promise.TimeoutError('queue-no-response')
+const TimeoutError = new Bluebird.TimeoutError('queue-no-response')
 const notLockAcquisitionError = (e) => e.name !== 'LockAcquisitionError'
 const isTimeoutError = (e) => e === TimeoutError
 
@@ -215,12 +215,12 @@ class DistributedCallbackQueue {
 
     // allows us to reject-and-halt (eg. on timeout) even if the #push'ed lock has not yet been acquired
     let jobAbortReject
-    let jobAbortPromise = new Promise((resolve, reject) => {
+    let jobAbortPromise = new Bluebird((resolve, reject) => {
       jobAbortReject = reject
     })
 
     let onJobCompleted
-    const jobCompletedPromise = new Promise((resolve, reject) => {
+    const jobCompletedPromise = new Bluebird((resolve, reject) => {
       onJobCompleted = (err, ...args) => {
         if (err) {
           if (jobAbortPromise) {
@@ -241,7 +241,7 @@ class DistributedCallbackQueue {
     let onCompleted
     try {
       const pushPromise = this.push(suffix, onJobCompleted, timeout)
-      onCompleted = await Promise.race([
+      onCompleted = await Bluebird.race([
         pushPromise,
         jobAbortPromise,
       ])
@@ -265,7 +265,7 @@ class DistributedCallbackQueue {
     const performWork = worker(...workerArgs)
 
     try {
-      const result = await Promise.race([
+      const result = await Bluebird.race([
         performWork,
         jobCompletedPromise,
       ])
@@ -314,15 +314,21 @@ class DistributedCallbackQueue {
    * @param  {String[]} args - array of locks to acquire
    * @return {MultiLock}
    */
-  multi(...args) {
+  async multi(...args) {
     const actions = toFlattenedTruthyArray(args)
     assert(actions.length, 'at least 1 action must be supplied')
 
-    return Promise
-      .map(actions, (action) => Promise.resolve(this.once(action)).reflect())
-      .then(MultiLock.batchAction)
-      .catch(MultiLockError, MultiLock.cleanup)
-      .then((locks) => new MultiLock(locks))
+    try {
+      const reflection = await Promise.allSettled(actions.map(action => this.once(action)))
+      const locks = MultiLock.batchAction(reflection)
+      return new MultiLock(locks)
+    } catch (err) {
+      if (err instanceof MultiLockError) {
+        return MultiLock.cleanup(err)
+      }
+
+      throw err
+    }
   }
 
   /**
@@ -365,7 +371,7 @@ class DistributedCallbackQueue {
         if (rejected === false) return next()
 
         // try requeueing and basically repeating operation until it succeeds
-        return Promise.fromCallback(workUnit).asCallback(next)
+        return Bluebird.fromCallback(workUnit).asCallback(next)
       }
 
       return this
@@ -374,7 +380,7 @@ class DistributedCallbackQueue {
         .asCallback(done)
     }
 
-    return Promise.fromCallback(workUnit)
+    return Bluebird.fromCallback(workUnit)
   }
 
   /**

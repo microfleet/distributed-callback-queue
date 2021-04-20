@@ -1,5 +1,5 @@
 {
-  "name": "dlock",
+  "name": "@microfleet/dlock",
   "version": "0.0.0",
   "description": "Creates distributed callback queue based on redis pubsub. Pass 2 redis clients (supports redis sentinel as well for HA), manages locks across multiple processes",
   "main": "./lib/distributed-callback-queue.js",
@@ -7,14 +7,14 @@
     "test": "yarn lint && mdep test run",
     "test:local": "yarn lint && yarn compile && jest __tests__/*.js",
     "pretest": "yarn compile",
-    "prepare": "yarn compile",
+    "prepublishOnly": "yarn compile",
     "lint": "eslint ./src",
-    "compile": "babel -d ./lib src",
+    "compile": "tsc -b ./tsconfig.build.json",
     "semantic-release": "semantic-release"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/AVVS/distributed-callback-queue.git"
+    "url": "https://github.com/microfleet/distributed-callback-queue.git"
   },
   "keywords": [
     "callback",
@@ -28,36 +28,43 @@
   "author": "Vitaly Aminev <v@makeomatic.ca>",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/AVVS/distributed-callback-queue/issues"
+    "url": "https://github.com/microfleet/distributed-callback-queue/issues"
   },
-  "homepage": "https://github.com/AVVS/distributed-callback-queue",
+  "homepage": "https://github.com/microfleet/distributed-callback-queue",
   "peerDependencies": {
     "ioredis": "~4.x.x"
   },
   "dependencies": {
+    "@microfleet/callback-queue": "^4.0.2",
+    "@microfleet/ioredis-lock": "^5.0.4",
     "bluebird": "^3.7.1",
-    "callback-queue": "^3.0.0",
-    "denque": "^1.4.1",
-    "ioredis-lock": "^4.0.0",
-    "lodash": "^4.17.15",
-    "pino": "^6.3.2",
-    "serialize-error": "^7.0.1"
+    "denque": "^1.5.0",
+    "lodash": "^4.17.21",
+    "pino": "^6.11.3",
+    "read-pkg-up": "7",
+    "serialize-error": "^8.1.0"
   },
   "devDependencies": {
-    "@babel/cli": "^7.10.3",
-    "@babel/core": "^7.10.3",
-    "@babel/plugin-transform-strict-mode": "^7.10.1",
-    "@makeomatic/deploy": "^10.2.1",
-    "codecov": "^3.7.0",
-    "cross-env": "^7.0.2",
-    "eslint": "^7.3.1",
-    "eslint-config-makeomatic": "^5.0.2",
-    "eslint-plugin-import": "^2.21.2",
-    "eslint-plugin-promise": "^4.2.1",
-    "eslint-plugin-unicorn": "^20.1.0",
-    "ioredis": "^4.17.3",
-    "jest": "^26.1.0",
-    "sinon": "^9.0.2"
+    "@makeomatic/deploy": "^10.4.0",
+    "@types/bluebird": "^3.5.33",
+    "@types/ioredis": "^4.22.3",
+    "@types/jest": "^26.0.22",
+    "@types/lodash": "^4.14.168",
+    "@types/node": "^14.14.41",
+    "@types/pino": "^6.3.7",
+    "@types/sinon": "^10.0.0",
+    "@typescript-eslint/eslint-plugin": "^4.22.0",
+    "@typescript-eslint/parser": "^4.22.0",
+    "cross-env": "^7.0.3",
+    "eslint": "^7.24.0",
+    "eslint-config-makeomatic": "^5.0.4",
+    "eslint-plugin-import": "^2.22.1",
+    "eslint-plugin-promise": "^5.1.0",
+    "ioredis": "^4.26.0",
+    "jest": "^26.6.3",
+    "sinon": "^10.0.0",
+    "ts-jest": "^26.5.5",
+    "typescript": "^4.2.4"
   },
   "engine": {
     "node": ">= 12.15.0"
@@ -65,7 +72,8 @@
   "jest": {
     "testEnvironment": "node",
     "verbose": true,
-    "clearMocks": true
+    "clearMocks": false,
+    "preset": "ts-jest"
   },
   "files": [
     "src/",

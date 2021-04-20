@@ -146,7 +146,7 @@ callbackQueue
 
     // do not forget to release lock after the job is done
     // do not care about result
-    return lock.release().reflect();
+    return lock.release()
   })
   .catch(err => {
     // lock could not be acquire
@@ -212,8 +212,8 @@ Promise.using(semaphore.take(), () => {
 });
 
 // option 2 - without disposer
-await semaphore.take(false);
 try {
+  await semaphore.take(false);
   // perform some async work and ensure we call leave afterwards
 } finally {
   semaphore.leave();

@@ -17,7 +17,7 @@ const compose = require('lodash/fp/compose')
 
 // internal deps
 const callbackQueue = require('./callback-queue')
-const Semaphore = require('./semaphore')
+const { Semaphore } = require('./semaphore')
 const { MultiLock, MultiLockError } = require('./multi-lock')
 const pkg = readPkg.sync().packageJson
 

@@ -456,6 +456,33 @@ describe('integration tests', () => {
         })
     ))
 
+    it('ensure each operation is processed serially, no disposer', () => (
+      Promise
+        .map(Array(50), async (_, i) => {
+          const semaphore = this.semaphores[i % this.semaphores.length]
+          try {
+            await semaphore.take(false)
+            this.counter += 1
+            // if it's possible for other contestants
+            // to run out of semaphore lock - this.counter will
+            // increase multiple times before resolving following promise
+            await Promise.delay(10)
+
+            // return the counter
+            return this.counter - 1
+          } finally {
+            semaphore.leave()
+          }
+        })
+        .then((args) => {
+          assert.equal(args.length, 50)
+          args.sort((a, b) => a - b).forEach((arg, i) => {
+            assert.equal(arg, i)
+          })
+          return null
+        })
+    ))
+
     afterEach(() => {
       this.semaphores = null
     })

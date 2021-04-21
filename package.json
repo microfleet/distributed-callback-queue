@@ -12,6 +12,9 @@
     "compile": "tsc -b ./tsconfig.build.json",
     "semantic-release": "semantic-release"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/microfleet/distributed-callback-queue.git"

@@ -44,8 +44,8 @@ describe('integration tests', () => {
     }
   }
 
-  function isLockAcquisitionError(e: Error): e is LockAcquisitionError {
-    return e.name === 'LockAcquisitionError'
+  function isLockAcquisitionError(e: unknown): e is LockAcquisitionError {
+    return e instanceof Error && e.name === 'LockAcquisitionError'
   }
 
   beforeEach(async () => {
@@ -266,7 +266,7 @@ describe('integration tests', () => {
       try {
         const result = await queueManager.dlock.fanout(id, 1500, job, arg1)
         onComplete(result)
-      } catch (e) {
+      } catch (e: any) {
         if (e.message === 'queue-no-response') {
           timeoutError(e)
         } else {
@@ -303,7 +303,7 @@ describe('integration tests', () => {
       try {
         const result = await queueManager.dlock.fanout(id, 1500, job)
         onComplete(result)
-      } catch (e) {
+      } catch (e: any) {
         if (e.message === 'queue-no-response') {
           timeoutError(e)
         } else {
@@ -331,7 +331,7 @@ describe('integration tests', () => {
       try {
         const results = await queueManager.dlock.fanout('error', job)
         onComplete(null, results)
-      } catch (e) {
+      } catch (e: any) {
         if (e.name === args.name && e.message === args.message) {
           onComplete(e)
         } else {

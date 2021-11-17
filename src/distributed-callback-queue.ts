@@ -1,7 +1,7 @@
 import Bluebird = require('bluebird')
 import redislock = require('@microfleet/ioredis-lock')
 import Redis = require('ioredis')
-import pino = require('pino')
+import { pino } from 'pino'
 import assert = require('assert')
 import readPkg = require('read-pkg-up')
 
@@ -15,7 +15,6 @@ import compose = require('lodash/fp/compose')
 import * as callbackQueue from './callback-queue'
 import { Semaphore } from './semaphore'
 import { MultiLock, MultiLockError } from './multi-lock'
-import P = require('pino')
 import { Thunk } from '@microfleet/callback-queue'
 
 const { LockAcquisitionError } = redislock
@@ -23,7 +22,7 @@ const isBoolean = filter<string>(Boolean)
 const toFlattenedTruthyArray = compose(isBoolean, flatten)
 const couldNotAcquireLockError = new LockAcquisitionError('job is already running')
 const TimeoutError = new Bluebird.TimeoutError('queue-no-response')
-const notLockAcquisitionError = (e: Error) => e.name !== 'LockAcquisitionError'
+const notLockAcquisitionError = (e: unknown): e is Error => e instanceof Error && e.name !== 'LockAcquisitionError'
 const isTimeoutError = (e: unknown): e is typeof TimeoutError => e === TimeoutError
 const pkg = readPkg.sync()?.packageJson
 
@@ -32,7 +31,7 @@ export interface Config {
   pubsub: Redis.Redis | Redis.Cluster
   pubsubChannel: string
   lock: Partial<redislock.Config>
-  log: P.Logger | boolean
+  log: pino.Logger | boolean
   lockPrefix: string
   debug: boolean
   name: string
@@ -66,7 +65,7 @@ function hasProp<K extends PropertyKey>(data: object, prop: K): data is Record<K
  *    @param lockPrefix - used for creating locks in redis
  */
 export class DistributedCallbackQueue {
-  public readonly logger: P.Logger
+  public readonly logger: pino.Logger
   private readonly lockPrefix: string
   private readonly client: Config['client']
   private readonly pubsub: Config['pubsub']
@@ -108,7 +107,7 @@ export class DistributedCallbackQueue {
     this.logger.info('Initialized...')
   }
 
-  static isCompatibleLogger(logger: unknown): logger is P.Logger {
+  static isCompatibleLogger(logger: unknown): logger is pino.Logger {
     if (typeof logger !== 'object' || logger == null) {
       return false
     }
@@ -122,7 +121,7 @@ export class DistributedCallbackQueue {
     return true
   }
 
-  static initLogger(options: Partial<Pick<Config, 'log' | 'debug' | 'name'>>): P.Logger {
+  static initLogger(options: Partial<Pick<Config, 'log' | 'debug' | 'name'>>): pino.Logger {
     const { log: logger, debug, name } = options
     const loggerEnabled = typeof logger === 'undefined' ? !!debug : logger
 
@@ -198,7 +197,7 @@ export class DistributedCallbackQueue {
     try {
       await lock.acquire(lockRedisKey)
       return this.createWorker(lockRedisKey, lock)
-    } catch (e) {
+    } catch (e: unknown) {
       if (notLockAcquisitionError(e)) {
         // this is an abnormal error, need to post it and cancel requests
         // so that they dont hang

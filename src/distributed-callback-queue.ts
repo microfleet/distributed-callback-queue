@@ -91,7 +91,8 @@ export class DistributedCallbackQueue {
 
     const lockOptions = defaults(options.lock || {}, {
       timeout: 10000,
-      retries: 2,
+      retries: 3,
+      jitter: 1.5,
       delay: 100,
     })
 

@@ -3,7 +3,7 @@ lockfileVersion: 5.3
 specifiers:
   '@makeomatic/deploy': ^12.5.0
   '@microfleet/callback-queue': ^4.0.2
-  '@microfleet/ioredis-lock': ^5.0.4
+  '@microfleet/ioredis-lock': ^5.1.0
   '@swc-node/jest': ^1.4.3
   '@types/bluebird': ^3.5.36
   '@types/ioredis': ^4.28.7
@@ -33,7 +33,7 @@ specifiers:
 
 dependencies:
   '@microfleet/callback-queue': 4.0.2
-  '@microfleet/ioredis-lock': 5.0.4_ioredis@4.28.4
+  '@microfleet/ioredis-lock': 5.1.0_ioredis@4.28.4
   bluebird: 3.7.2
   denque: 2.0.1
   lodash: 4.17.21
@@ -890,8 +890,8 @@ packages:
       - supports-color
     dev: false
 
-  /@microfleet/ioredis-lock/5.0.4_ioredis@4.28.4:
-    resolution: {integrity: sha512-W7/FfD5dDnY+2qtJlmAtHODvRv4E3iyqPS9XwKpMYM8U3hgMPeCdWSvWc1dflDENetm1BHBtdnMfigUlcz66Fg==}
+  /@microfleet/ioredis-lock/5.1.0_ioredis@4.28.4:
+    resolution: {integrity: sha512-PcDqu3t3ZlVKyxKHb+kn4mdHkHq8o3Z4eQxRyGd8JdbNmII8YYp/08yuqnUMOquAhUgFWOWuZ0CfOlwgakeVxQ==}
     peerDependencies:
       ioredis: ~4.x.x
     dependencies:

@@ -43,7 +43,7 @@
   },
   "dependencies": {
     "@microfleet/callback-queue": "^4.0.2",
-    "@microfleet/ioredis-lock": "^5.0.4",
+    "@microfleet/ioredis-lock": "^5.1.0",
     "bluebird": "^3.7.2",
     "denque": "^2.0.1",
     "lodash": "^4.17.21",

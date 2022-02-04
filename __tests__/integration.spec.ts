@@ -10,14 +10,31 @@ describe('integration tests', () => {
   jest.setTimeout(10000)
 
   let queueManagers: QueueManager[]
+  let ctor: any
+  let config: ConstructorParameters<typeof Redis | typeof Redis.Cluster>
+  let retries = 2
+  let delay = 100
+  if (process.env.DB === 'cluster') {
+    const redisHosts = [7000, 7001, 7002]
+      .map((port) => ({ host: 'redis-cluster', port }))
+    config = [redisHosts, { lazyConnect: true }]
+    ctor = Redis.Cluster
+    retries = 20
+    delay = 50
+  } else if (process.env.DB === 'sentinel') {
+    config = [{ sentinels: [{ host: 'redis-sentinel', port: 26379 }], name: 'mservice', lazyConnect: true }]
+    ctor = Redis
+  } else {
+    throw new Error('invalid DB setup')
+  }
 
   class QueueManager {
-    public readonly redis: Redis.Redis
-    public readonly pubsub: Redis.Redis
+    public readonly redis: Redis.Redis | Redis.Cluster
+    public readonly pubsub: Redis.Redis | Redis.Cluster
     private _dlock: DistributedCallbackQueue | null = null
 
     constructor() {
-      this.redis = new Redis({ sentinels: [{ host: 'redis-sentinel', port: 26379 }], name: 'mservice', lazyConnect: true })
+      this.redis = new ctor(...config)
       this.pubsub = this.redis.duplicate()
     }
 
@@ -27,11 +44,6 @@ describe('integration tests', () => {
     }
 
     async ready() {
-      await Promise.all([
-        this.redis.connect(),
-        this.pubsub.connect()
-      ])
-
       this._dlock = new DistributedCallbackQueue({
         log: true,
         client: this.redis,
@@ -39,8 +51,16 @@ describe('integration tests', () => {
         pubsubChannel: 'dlock',
         lock: {
           timeout: 2000,
+          retries,
+          delay,
         },
       })
+
+      await this._dlock.connect()
+    }
+
+    async close() {
+      this._dlock?.close()
     }
   }
 
@@ -355,31 +375,29 @@ describe('integration tests', () => {
       })
   })
 
-  it('#once - performs task once and rejects others', () => {
+  it('#once - performs task once and rejects others', async () => {
     const job = sinon.spy()
     const failedToQueue = sinon.spy()
     const unexpectedError = sinon.spy()
 
-    return Promise.map(queueManagers, (queueManager) => {
-      return Promise.resolve(queueManager.dlock.once('once'))
-        .then((lock) => {
-          return Promise.delay(1000)
-            .then(() => {
-              return lock.release()
-            })
-            .then(() => {
-              return job()
-            })
-        })
-        .catch(isLockAcquisitionError, failedToQueue)
-        .catch(unexpectedError)
+    await Promise.map(queueManagers, async (queueManager) => {
+      try {
+        const lock = await queueManager.dlock.once('once')
+        await Promise.delay(1500)
+        job()
+        await lock.release()
+      } catch (err) {
+        if (isLockAcquisitionError(err)) {
+          failedToQueue(err)
+        } else {
+          unexpectedError(err)
+        }
+      }
     })
-      .then(() => {
-        assert(job.calledOnce, 'job was called more than once')
-        assert.equal(failedToQueue.callCount, 9, 'unexpected error was raised')
-        assert.equal(unexpectedError.called, false, 'fatal error was raised')
-        return null
-      })
+
+    assert(job.calledOnce, 'job was called more than once')
+    assert.equal(failedToQueue.callCount, 9, 'unexpected error was raised')
+    assert.equal(unexpectedError.called, false, 'fatal error was raised')
   })
 
   it('#multi - able to acquire lock, extend it and release it', async () => {
@@ -481,9 +499,6 @@ describe('integration tests', () => {
 
   afterEach(async () => {
     await queueManagers[0].redis.flushdb()
-    return Promise.map(queueManagers, (queueManager) => Promise.all([
-      queueManager.redis.quit(),
-      queueManager.pubsub.quit()
-    ]))
+    await Promise.map(queueManagers, (queueManager) => queueManager.dlock.close())
   })
 })

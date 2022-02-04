@@ -70,8 +70,9 @@ export class DistributedCallbackQueue {
   private readonly client: Config['client']
   private readonly pubsub: Config['pubsub']
   private readonly lockOptions: redislock.Config
-  private readonly publish: callbackQueue.Publisher
-  private readonly consume: callbackQueue.Consumer
+  private readonly pubsubChannel: string
+  private publish!: callbackQueue.Publisher
+  private consume!: callbackQueue.Consumer
 
   constructor(options: Partial<Config> = {}) {
     const { client } = options
@@ -84,6 +85,7 @@ export class DistributedCallbackQueue {
 
     const { pubsubChannel } = options
     assert.ok(pubsubChannel, 'pubsubChannel must be specified')
+    this.pubsubChannel = pubsubChannel
 
     assert(pkg, 'must be able to find package.json')
 
@@ -98,13 +100,25 @@ export class DistributedCallbackQueue {
     this.pubsub = pubsub
     this.lockOptions = lockOptions
     this.lockPrefix = options.lockPrefix || pkg.name
-    this.publish = callbackQueue.createPublisher(client, pubsubChannel, this.logger)
-    this.consume = callbackQueue.createConsumer(pubsub, pubsubChannel, this.logger)
+  }
 
+  async connect() {
+    const { client, pubsub } = this
+
+    this.logger.info('connecting redis clients')
+    await Promise.all([client.connect(), pubsub.connect()])
+
+    this.publish = callbackQueue.createPublisher(client, this.pubsubChannel, this.logger)
+    this.consume = callbackQueue.createConsumer(pubsub, this.pubsubChannel, this.logger)
     this.pubsub.on('messageBuffer', this.consume)
-
-    // ready
     this.logger.info('Initialized...')
+  }
+
+  async close() {
+    const { client, pubsub } = this
+
+    this.logger.info('disconnecting redis clients')
+    await Promise.all([client.quit(), pubsub.quit()])
   }
 
   static isCompatibleLogger(logger: unknown): logger is pino.Logger {

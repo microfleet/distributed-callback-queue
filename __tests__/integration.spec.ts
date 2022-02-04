@@ -19,8 +19,8 @@ describe('integration tests', () => {
       .map((port) => ({ host: 'redis-cluster', port }))
     config = [redisHosts, { lazyConnect: true }]
     ctor = Redis.Cluster
-    retries = 20
-    delay = 50
+    retries = 10
+    delay = 100
   } else if (process.env.DB === 'sentinel') {
     config = [{ sentinels: [{ host: 'redis-sentinel', port: 26379 }], name: 'mservice', lazyConnect: true }]
     ctor = Redis
@@ -441,7 +441,7 @@ describe('integration tests', () => {
     await Promise.map(queueManagers, async (queueManager) => {
       try {
         const lock = await queueManager.dlock.multi('1', '2', '3')
-        await Promise.delay(1000)
+        await Promise.delay(1500)
         await lock.release()
         job()
       } catch (err) {

@@ -1,11 +1,10 @@
 const uid = process.getuid();
 
 module.exports = exports = {
-  node: "16",
+  node: "18",
   nycCoverage: false,
   test_framework: "jest --coverage --coverageDirectory <coverageDirectory> --runTestsByPath --colors",
   tests: "__tests__/*.spec.ts",
-  docker_compose: "__tests__/docker-compose.yml",
   auto_compose: true,
   services: [],
   in_one: true,

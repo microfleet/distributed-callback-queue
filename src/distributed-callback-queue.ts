@@ -31,7 +31,7 @@ export interface Config {
   pubsub: Redis.Redis | Redis.Cluster
   pubsubChannel: string
   lock: Partial<redislock.Config>
-  log: pino.Logger | boolean
+  log: pino.Logger<any> | boolean
   lockPrefix: string
   debug: boolean
   name: string
@@ -65,7 +65,7 @@ function hasProp<K extends PropertyKey>(data: object, prop: K): data is Record<K
  *    @param lockPrefix - used for creating locks in redis
  */
 export class DistributedCallbackQueue {
-  public readonly logger: pino.Logger
+  public readonly logger: pino.Logger<any>
   private readonly lockPrefix: string
   private readonly client: Config['client']
   private readonly pubsub: Config['pubsub']
@@ -122,7 +122,7 @@ export class DistributedCallbackQueue {
     await Promise.all([client.quit(), pubsub.quit()])
   }
 
-  static isCompatibleLogger(logger: unknown): logger is pino.Logger {
+  static isCompatibleLogger(logger: unknown): logger is pino.Logger<any> {
     if (typeof logger !== 'object' || logger == null) {
       return false
     }
@@ -136,7 +136,7 @@ export class DistributedCallbackQueue {
     return true
   }
 
-  static initLogger(options: Partial<Pick<Config, 'log' | 'debug' | 'name'>>): pino.Logger {
+  static initLogger(options: Partial<Pick<Config, 'log' | 'debug' | 'name'>>): pino.Logger<any> {
     const { log: logger, debug, name } = options
     const loggerEnabled = typeof logger === 'undefined' ? !!debug : logger
 

@@ -1,7 +1,7 @@
 const uid = process.getuid();
 
 module.exports = exports = {
-  node: "18",
+  node: "20",
   nycCoverage: false,
   test_framework: "jest --coverage --coverageDirectory <coverageDirectory> --runTestsByPath --colors",
   tests: "__tests__/*.spec.ts",

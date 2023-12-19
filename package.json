@@ -67,7 +67,6 @@
     "@types/sinon": "^17.0.2",
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
-    "codecov": "^3.8.3",
     "cross-env": "^7.0.3",
     "eslint": "^8.56.0",
     "eslint-config-makeomatic": "^6.0.0",

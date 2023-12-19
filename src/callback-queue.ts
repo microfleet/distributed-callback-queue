@@ -1,5 +1,5 @@
 import P from 'pino'
-import { delay } from 'bluebird'
+import { setTimeout } from 'node:timers/promises'
 import * as callbackQueue from '@microfleet/callback-queue'
 import { serializeError, deserializeError } from 'serialize-error'
 import Redis = require('ioredis')
@@ -12,6 +12,8 @@ export type RedisInstance = Redis.Redis | Redis.Cluster
 export type Publisher = (key: string, err?: Error | null, ...args: any[]) => Promise<void>
 export type Consumer = (channel: string, message: string) => void
 
+const kError = new Error('callback called multiple times')
+
 /**
  * Call functions stored in local queues
  * @param queueName
@@ -21,7 +23,7 @@ export type Consumer = (channel: string, message: string) => void
 function call(queueName: string, args: any[], logger: P.Logger): void {
   const callback = queue.get(queueName)
   if (!callback) {
-    throw new Error('callback called multiple times')
+    throw kError
   }
 
   // these are async anyways - gonna schedule them
@@ -98,7 +100,7 @@ export function createConsumer(redis: RedisInstance, pubsubChannel: string, logg
       logger.info({ pubsubChannel }, 'Subscribed to channel')
     } catch (err) {
       logger.error({ err }, 'Failed to subsctibe to pubsub channel')
-      await delay(250)
+      await setTimeout(250)
       return connect()
     }
   }

@@ -5,6 +5,7 @@ import sinon = require('sinon')
 import { noop } from 'lodash'
 import { DistributedCallbackQueue, MultiLockError, Semaphore } from '../src/distributed-callback-queue'
 import { LockAcquisitionError } from '@microfleet/ioredis-lock'
+import { setTimeout } from 'timers/promises'
 
 describe('integration tests', () => {
   jest.setTimeout(10000)
@@ -78,7 +79,7 @@ describe('integration tests', () => {
 
   it('#push: job is performed only once', () => {
     const args = [null, 'completed']
-    const job = sinon.spy((next) => setTimeout(next, 500, ...args))
+    const job = sinon.spy((next) => global.setTimeout(next, 500, ...args))
     const onComplete = sinon.spy()
     const failedToQueue = sinon.spy()
     const unexpectedError = sinon.spy()
@@ -216,7 +217,7 @@ describe('integration tests', () => {
   it('#fanout: job is performed only once', () => {
     const args = ['completed']
     const job = sinon.spy(async () => {
-      await Promise.delay(500)
+      await setTimeout(500)
       return [...args]
     })
     const onComplete = sinon.spy()
@@ -273,7 +274,7 @@ describe('integration tests', () => {
 
   it('#fanout: fails after timeout', async () => {
     const job = sinon.spy(async (_: any) => {
-      await Promise.delay(3000)
+      await setTimeout(3000)
     })
     const arg1 = 'arg1'
     const onComplete = sinon.spy()
@@ -305,7 +306,7 @@ describe('integration tests', () => {
 
   it('#fanout: fails after timeout even if lock has not been acquired', async () => {
     const job = sinon.spy(async () => {
-      await Promise.delay(3000)
+      await setTimeout(3000)
     })
     const onComplete = sinon.spy()
     const timeoutError = sinon.spy()
@@ -383,7 +384,7 @@ describe('integration tests', () => {
     await Promise.map(queueManagers, async (queueManager) => {
       try {
         const lock = await queueManager.dlock.once('once')
-        await Promise.delay(1500)
+        await setTimeout(1500)
         job()
         await lock.release()
       } catch (err) {
@@ -438,10 +439,13 @@ describe('integration tests', () => {
     const failedToQueue = sinon.spy()
     const unexpectedError = sinon.spy()
 
-    await Promise.map(queueManagers, async (queueManager) => {
+    await Promise.map(queueManagers, async (queueManager, idx) => {
       try {
-        const lock = await queueManager.dlock.multi('1', '2', '3')
-        await Promise.delay(1500)
+        if (idx !== 0) {
+          await setTimeout(100) // give a chance for first idx to acquire _all_ locks so that test isnt flaky
+        }
+        const lock = await queueManager.dlock.multi('5', '6', '7')
+        await setTimeout(1500)
         await lock.release()
         job()
       } catch (err) {
@@ -453,7 +457,7 @@ describe('integration tests', () => {
       }
     })
 
-    assert(job.calledOnce, 'job was called more than once')
+    assert.equal(job.callCount, 1)
     assert.strictEqual(failedToQueue.callCount, 9, 'unexpected error was raised')
     assert.strictEqual(unexpectedError.called, false, 'fatal error was raised')
   })
@@ -479,7 +483,7 @@ describe('integration tests', () => {
             // if it's possible for other contestants
             // to run out of semaphore lock - counter will
             // increase multiple times before resolving following promise
-            await Promise.delay(10)
+            await setTimeout(10)
 
             // return the counter
             return counter - 1

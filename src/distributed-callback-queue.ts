@@ -121,7 +121,10 @@ export class DistributedCallbackQueue {
     const { client, pubsub } = this
 
     this.logger.info('disconnecting redis clients')
-    await Promise.all([client.quit(), pubsub.quit()])
+    await Promise.all([
+      client.quit(),
+      pubsub.quit()
+    ])
   }
 
   static isCompatibleLogger(logger: unknown): logger is Logger {

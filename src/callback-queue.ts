@@ -2,13 +2,13 @@ import P from 'pino'
 import { setTimeout } from 'node:timers/promises'
 import * as callbackQueue from '@microfleet/callback-queue'
 import { serializeError, deserializeError } from 'serialize-error'
-import Redis = require('ioredis')
+import type { Redis, Cluster } from 'ioredis'
 
 // callback buckets
 const queue = new Map<string, callbackQueue.Thunk>()
 const { isArray } = Array
 
-export type RedisInstance = Redis.Redis | Redis.Cluster
+export type RedisInstance = Redis | Cluster
 export type Publisher = (key: string, err?: Error | null, ...args: any[]) => Promise<void>
 export type Consumer = (channel: string, message: string) => void
 
@@ -36,8 +36,8 @@ function call(queueName: string, args: any[], logger: P.Logger): void {
 
 /**
  * Add callback into local queue
- * @param {String} key - queue key
- * @param {Function} callback - function to add
+ * @param key - queue key
+ * @param callback - function to add
  */
 export function add(key: string, callback: callbackQueue.Thunk): boolean {
   const aggregator = callbackQueue.add(key, callback)
@@ -51,7 +51,9 @@ export function add(key: string, callback: callbackQueue.Thunk): boolean {
 
 /**
  * Creates publish function that is used later on to process callbacks
- * @param {Object} redis
+ * @param redis
+ * @param pubsubChannel
+ * @param logger
  */
 export function createPublisher(redis: RedisInstance, pubsubChannel: string, logger: P.Logger): Publisher {
   return async function publishResult(lockRedisKey: string, err?: Error | null, ...args: any[]): Promise<void> {
@@ -72,7 +74,7 @@ export function createPublisher(redis: RedisInstance, pubsubChannel: string, log
     try {
       call(lockRedisKey, localArgs, logger)
     } catch (err) {
-      logger.warn({ err, lockRedisKey }, 'failed to perform call')
+      logger.trace({ err, lockRedisKey }, 'failed to perform call')
     }
   }
 }
@@ -133,7 +135,9 @@ export function createConsumer(redis: RedisInstance, pubsubChannel: string, logg
 
       call(key, args, logger)
     } catch (err) {
-      logger.warn({ err }, 'call failed')
+      if (err !== kError) {
+        logger.warn({ err }, 'call failed')
+      }
     }
   }
 }

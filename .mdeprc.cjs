@@ -1,9 +1,8 @@
 const uid = process.getuid();
 
 module.exports = exports = {
-  node: "20",
-  nycCoverage: false,
-  test_framework: "jest --coverage --coverageDirectory <coverageDirectory> --runTestsByPath --colors",
+  node: "22",
+  test_framework: "../../../usr/local/bin/node --test --import @swc-node/register/esm-register",
   tests: "__tests__/*.spec.ts",
   auto_compose: true,
   services: [],

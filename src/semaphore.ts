@@ -1,9 +1,15 @@
-import Deque = require('denque')
-import Bluebird = require('bluebird')
+/* eslint-disable @typescript-eslint/no-unsafe-declaration-merging */
+import Deque from 'denque'
+import { promisify } from 'node:util'
 import { LockAcquisitionError } from '@microfleet/ioredis-lock'
-import type { DistributedCallbackQueue } from './distributed-callback-queue'
+import type { DistributedCallbackQueue } from './distributed-callback-queue.js'
+import { setTimeout } from 'node:timers/promises'
 
 export type Resolver<T = any> = (err?: any, result?: T) => void
+
+export interface Semaphore {
+  take: <T>() => Promise<T>
+}
 
 export class Semaphore {
   private queue = new Deque<Resolver>()
@@ -14,38 +20,36 @@ export class Semaphore {
     this.dlock = dlock
     this.key = key
 
-    this.next = this.next.bind(this)
-    this.leave = this.leave.bind(this)
-    this._take = this._take.bind(this)
+    // this.next = this.next.bind(this)
+    // this.leave = this.leave.bind(this)
+    // this._take = this._take.bind(this)
+    // this.take = promisify<any>(this._take)
   }
 
-  public async take<T>(): Promise<T> {
-    return Bluebird.fromCallback<T>(this._take)
-  }
-
-  private async _take<T>(next: Resolver<T>) {
+  _take<T>(resolver: Resolver<T>) {
     if (this.idle === false) {
-      this.queue.push(next)
+      this.queue.push(resolver)
       return
     }
 
     this.idle = false
-
-    try {
-      const done = await this.dlock.push(this.key, this.next)
-      this.current = done
-      return next()
-    } catch (err) {
-      if (err instanceof LockAcquisitionError) {
-        this.dlock.logger.debug({ err }, 'failed to acquire lock')
-        this._take(next)
-      } else {
-        this.dlock.logger.error({ err }, 'semaphore operational error')
-        await Bluebird.delay(50)
-        await this._take(next)
-        return this.next()
-      }
-    }
+    this.dlock
+      .push(this.key, () => this.next())
+      .then((done) => {
+        this.current = done
+        return resolver()
+      })
+      .catch(async (err) => {
+        if (err instanceof LockAcquisitionError) {
+          this.dlock.logger.debug({ err }, 'failed to acquire lock')
+          this._take(resolver)
+        } else {
+          this.dlock.logger.error({ err }, 'semaphore operational error')
+          await setTimeout(50)
+          this._take(resolver)
+          this.next()
+        }
+      })
   }
 
   public async next(): Promise<void> {
@@ -66,3 +70,5 @@ export class Semaphore {
     if (done) done()
   }
 }
+
+Semaphore.prototype.take = promisify<any>(Semaphore.prototype._take)

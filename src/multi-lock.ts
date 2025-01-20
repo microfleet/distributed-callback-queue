@@ -1,6 +1,6 @@
-import assert = require('assert')
+import assert from 'node:assert/strict'
 import { Lock } from '@microfleet/ioredis-lock'
-import { MultiLockError } from './multi-lock-error'
+import { MultiLockError } from './multi-lock-error.js'
 
 export { MultiLockError }
 export class MultiLock {

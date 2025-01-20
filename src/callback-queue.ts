@@ -36,8 +36,8 @@ function call(queueName: string, args: any[], logger: P.Logger): void {
 
 /**
  * Add callback into local queue
- * @param {String} key - queue key
- * @param {Function} callback - function to add
+ * @param key - queue key
+ * @param callback - function to add
  */
 export function add(key: string, callback: callbackQueue.Thunk): boolean {
   const aggregator = callbackQueue.add(key, callback)
@@ -51,7 +51,9 @@ export function add(key: string, callback: callbackQueue.Thunk): boolean {
 
 /**
  * Creates publish function that is used later on to process callbacks
- * @param {Object} redis
+ * @param redis
+ * @param pubsubChannel
+ * @param logger
  */
 export function createPublisher(redis: RedisInstance, pubsubChannel: string, logger: P.Logger): Publisher {
   return async function publishResult(lockRedisKey: string, err?: Error | null, ...args: any[]): Promise<void> {

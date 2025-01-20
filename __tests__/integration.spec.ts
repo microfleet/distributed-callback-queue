@@ -4,7 +4,6 @@ import { setTimeout } from 'node:timers/promises'
 import { test } from 'node:test'
 import sinon from 'sinon'
 import { Redis, Cluster, RedisOptions, ClusterNode, ClusterOptions } from 'ioredis'
-import noop from 'lodash/noop.js'
 import { DistributedCallbackQueue, MultiLockError, Semaphore } from '../src/distributed-callback-queue.js'
 import { LockAcquisitionError } from '@microfleet/ioredis-lock'
 
@@ -307,7 +306,7 @@ test('integration tests', async (t) => {
     const onComplete = sinon.spy()
     const timeoutError = sinon.spy()
     const unexpectedError = sinon.spy()
-    const unacquirableLock = new Promise<any>(noop)
+    const unacquirableLock = new Promise<any>(() => {})
 
     await Promise.all(queueManagers.map(async (queueManager, idx) => {
       const id = String(idx % 3)

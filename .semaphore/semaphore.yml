@@ -17,12 +17,12 @@ global_job_config:
   prologue:
     commands:
       - set -e
-      - sem-version node 20
-      - npm i -g pnpm@8
+      - sem-version node 22
+      - corepack enable pnpm
       - checkout
       - cache restore node-$(checksum pnpm-lock.yaml)
       - pnpm i --frozen-lockfile --prefer-offline --ignore-scripts
-      - cache store node-$(checksum pnpm-lock.yaml) ~/.local/share/pnpm/store
+      - cache store node-$(checksum pnpm-lock.yaml) $(pnpm store path)
 
 blocks:
   - name: tests

@@ -1,36 +1,33 @@
-import Bluebird = require('bluebird')
-import redislock = require('@microfleet/ioredis-lock')
-import Redis = require('ioredis')
+import { LockAcquisitionError, Config as LockConfig, Lock, createLock } from '@microfleet/ioredis-lock'
+import { Thunk } from '@microfleet/callback-queue'
+import { type Redis, Cluster } from 'ioredis'
 import { pino } from 'pino'
-import assert = require('assert')
-import readPkg = require('read-pkg-up')
-
-// lodash helpers
-import defaults = require('lodash/defaults')
-import flatten = require('lodash/fp/flatten')
-import filter = require('lodash/fp/filter')
-import compose = require('lodash/fp/compose')
+import assert from 'node:assert/strict'
+import { readPackageUpSync } from 'read-package-up'
 
 // internal deps
-import * as callbackQueue from './callback-queue'
-import { Semaphore } from './semaphore'
-import { MultiLock, MultiLockError } from './multi-lock'
-import { Thunk } from '@microfleet/callback-queue'
+import * as callbackQueue from './callback-queue.js'
+import { Semaphore } from './semaphore.js'
+import { MultiLock, MultiLockError } from './multi-lock.js'
 
-const { LockAcquisitionError } = redislock
-const isBoolean = filter<string>(Boolean)
-const toFlattenedTruthyArray = compose(isBoolean, flatten)
+export class TimeoutError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'TimeoutError'
+  }
+}
+
 const couldNotAcquireLockError = new LockAcquisitionError('job is already running')
-const TimeoutError = new Bluebird.TimeoutError('queue-no-response')
+const kTimeoutError = new TimeoutError('queue-no-response')
 const notLockAcquisitionError = (e: unknown): e is Error => e instanceof Error && e.name !== 'LockAcquisitionError'
 const isTimeoutError = (e: unknown): e is typeof TimeoutError => e === TimeoutError
-const pkg = readPkg.sync()?.packageJson
+const pkg = readPackageUpSync()?.packageJson
 
 export interface Config {
-  client: Redis.Redis | Redis.Cluster
-  pubsub: Redis.Redis | Redis.Cluster
+  client: Redis | Cluster
+  pubsub: Redis | Cluster
   pubsubChannel: string
-  lock: Partial<redislock.Config>
+  lock: Partial<LockConfig>
   log: Logger | boolean
   lockPrefix: string
   debug: boolean
@@ -41,10 +38,9 @@ export type Logger = pino.Logger
 
 export type Worker = {
   (err?: Error | null, ...args: any[]): Promise<void | null>
-  lock: redislock.Lock | null
+  lock: Lock | null
 }
 
-// eslint-disable-next-line @typescript-eslint/ban-types
 function hasProp<K extends PropertyKey>(data: object, prop: K): data is Record<K, unknown> {
   return prop in data
 }
@@ -71,7 +67,7 @@ export class DistributedCallbackQueue {
   private readonly lockPrefix: string
   private readonly client: Config['client']
   private readonly pubsub: Config['pubsub']
-  private readonly lockOptions: redislock.Config
+  private readonly lockOptions: LockConfig
   private readonly pubsubChannel: string
   private publish!: callbackQueue.Publisher
   private consume!: callbackQueue.Consumer
@@ -81,7 +77,7 @@ export class DistributedCallbackQueue {
     assert.ok(client, 'options.client must be defined')
 
     const pubsub = options.pubsub || client.duplicate()
-    if (!(pubsub instanceof Redis.Cluster)) {
+    if (!(pubsub instanceof Cluster)) {
       assert.notStrictEqual(client, pubsub, 'options.client and options.pubsub must have separate redis clients')
     }
 
@@ -91,12 +87,13 @@ export class DistributedCallbackQueue {
 
     assert(pkg, 'must be able to find package.json')
 
-    const lockOptions = defaults(options.lock || {}, {
+    const lockOptions: LockConfig = {
       timeout: 10000,
       retries: 3,
       jitter: 1.5,
       delay: 100,
-    })
+      ...options.lock
+    }
 
     this.logger = DistributedCallbackQueue.initLogger(options)
     this.client = client
@@ -171,8 +168,8 @@ export class DistributedCallbackQueue {
    * Creates lock instance
    * @return {Lock}
    */
-  getLock(): redislock.Lock {
-    return redislock.createLock(this.client, this.lockOptions)
+  getLock(): Lock {
+    return createLock(this.client, this.lockOptions)
   }
 
   /**
@@ -202,7 +199,7 @@ export class DistributedCallbackQueue {
         callbackQueue._call,
         timeout,
         lockRedisKey,
-        [TimeoutError],
+        [kTimeoutError],
         this.logger
       )
 
@@ -247,30 +244,26 @@ export class DistributedCallbackQueue {
     let [timeout, worker, ...workerArgs] = props
 
     // in case of 1 arg
-    switch (propsAmount) {
-      case 1:
+    if (propsAmount === 1) {
         worker = timeout
         timeout = undefined
-        break
-      default:
-        if (typeof timeout === 'function') {
-          workerArgs.unshift(worker)
-          worker = timeout
-          timeout = undefined
-        }
+    } else if (typeof timeout === 'function') {
+      workerArgs.unshift(worker)
+      worker = timeout
+      timeout = undefined
     }
 
     assert(typeof worker === 'function', 'ensure that you pass a function as a worker')
     assert(typeof timeout === 'number' || typeof timeout === 'undefined', 'invalid timeout value')
 
     // allows us to reject-and-halt (eg. on timeout) even if the #push'ed lock has not yet been acquired
-    let jobAbortReject: undefined | ((err?: Error | null) => void)
-    let jobAbortPromise: Promise<any> | undefined = new Bluebird((_, reject) => {
+    let jobAbortReject: null | ((err?: Error | null) => void)
+    let jobAbortPromise: Promise<any> | null = new Promise((_, reject) => {
       jobAbortReject = reject
     })
 
     let onJobCompleted: (err?: Error | null, args?: any) => void
-    const jobCompletedPromise = new Bluebird((resolve, reject) => {
+    const jobCompletedPromise = new Promise((resolve, reject) => {
       onJobCompleted = (err, args) => {
         if (err) {
           if (jobAbortPromise && jobAbortReject) {
@@ -292,17 +285,17 @@ export class DistributedCallbackQueue {
     try {
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const pushPromise = this.push(suffix, onJobCompleted!, timeout)
-      onCompleted = await Bluebird.race([
+      onCompleted = await Promise.race([
         pushPromise,
         jobAbortPromise,
       ])
 
-      jobAbortReject = undefined
-      jobAbortPromise = undefined
+      jobAbortReject = null
+      jobAbortPromise = null
     } catch (err) {
       // doing this in finally {} is too late
-      jobAbortReject = undefined
-      jobAbortPromise = undefined
+      jobAbortReject = null
+      jobAbortPromise = null
 
       if (notLockAcquisitionError(err)) {
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -317,7 +310,7 @@ export class DistributedCallbackQueue {
     const performWork = worker(...workerArgs)
 
     try {
-      const result = await Bluebird.race([
+      const result = await Promise.race([
         performWork,
         jobCompletedPromise,
       ])
@@ -352,7 +345,7 @@ export class DistributedCallbackQueue {
    *                    Promise contains lock, which must be released after the job is completed
    *                    Call `lock.release()` or `lock.extend` based on what's needed
    */
-  async once(suffix: string): Promise<redislock.Lock> {
+  async once(suffix: string): Promise<Lock> {
     assert(suffix, 'must be a truthy string')
 
     const lockRedisKey = this.key(suffix)
@@ -363,11 +356,11 @@ export class DistributedCallbackQueue {
 
   /**
    * Acquires multi-lock. All or none strategy
-   * @param  {String[]} args - array of locks to acquire
+   * @param  args - array of locks to acquire
    * @return {MultiLock}
    */
   async multi(...args: any[]): Promise<MultiLock> {
-    const actions = toFlattenedTruthyArray(args)
+    const actions = args.flat(10).filter(Boolean)
     assert(actions.length, 'at least 1 action must be supplied')
 
     try {
@@ -390,7 +383,7 @@ export class DistributedCallbackQueue {
    * @returns worker - call with arguments that need to be passed to
    *    all queued callbacks
    */
-  createWorker(lockRedisKey: string, acquiredLock: redislock.Lock): Worker {
+  createWorker(lockRedisKey: string, acquiredLock: Lock): Worker {
     /**
      * This function must be called when job has been completed
      * @param  {Error} err
